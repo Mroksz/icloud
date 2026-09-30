@@ -19,6 +19,20 @@ const {
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const STREAM_URL = process.env.STREAM_URL;
+const FUNNY_CHANNEL_ID = "1530770440992194643";
+const FUNNY_ROLE_ID = "1531550671285784770";
+const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
+const MAX_FUNNY_MESSAGE_DELAY = 5 * 60 * 60 * 1000;
+const FUNNY_MESSAGES = [
+    "Mi cerebro abrió 37 pestañas y ahora ninguna sabe de dónde viene la música.",
+    "Hoy iba a ser productivo, pero mi cama presentó una contraoferta irresistible.",
+    "No estoy procrastinando; estoy dejando que las ideas maduren en otra habitación.",
+    "Mi última neurona pidió vacaciones y no dejó suplente.",
+    "Fui a buscar motivación y volví con hambre.",
+    "Tengo un plan perfecto. Solo falta recordar cuál era.",
+    "Mi nivel de energía está en modo ahorro, como el celular al 2%.",
+    "Si pensar contara como ejercicio, ya habría terminado la rutina de hoy."
+];
 
 // Tiempo mínimo entre mensajes
 const MESSAGE_COOLDOWN = 5000;
@@ -179,6 +193,48 @@ async function registerCommands() {
 
 }
 
+function scheduleFunnyMessage() {
+
+    const delay = Math.floor(
+        Math.random() * (MAX_FUNNY_MESSAGE_DELAY - MIN_FUNNY_MESSAGE_DELAY + 1)
+    ) + MIN_FUNNY_MESSAGE_DELAY;
+
+    setTimeout(async () => {
+
+        try {
+
+            const channel = await client.channels.fetch(FUNNY_CHANNEL_ID);
+
+            if (!channel?.isTextBased()) {
+                throw new Error("El canal configurado no existe o no admite mensajes.");
+            }
+
+            const phrase = FUNNY_MESSAGES[
+                Math.floor(Math.random() * FUNNY_MESSAGES.length)
+            ];
+
+            await channel.send({
+                content: `<@&${FUNNY_ROLE_ID}> ${phrase}`,
+                allowedMentions: {
+                    parse: [],
+                    roles: [FUNNY_ROLE_ID]
+                }
+            });
+
+        } catch (error) {
+
+            console.error("No pude enviar el mensaje automático:", error);
+
+        } finally {
+
+            scheduleFunnyMessage();
+
+        }
+
+    }, delay);
+
+}
+
 // ===============================
 // BOT ENCENDIDO
 // ===============================
@@ -204,6 +260,7 @@ client.once("ready", async () => {
         console.warn("Define STREAM_URL en .env para activar el estado de transmisión.");
     }
 
+    scheduleFunnyMessage();
     await registerCommands();
 
 });
