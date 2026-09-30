@@ -99,6 +99,7 @@ const commands = [
     new SlashCommandBuilder()
         .setName("clear")
         .setDescription("Elimina mensajes.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
         .addIntegerOption(option =>
             option
                 .setName("cantidad")
@@ -111,6 +112,7 @@ const commands = [
     new SlashCommandBuilder()
         .setName("kick")
         .setDescription("Expulsa a un usuario.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.KickMembers)
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -127,6 +129,7 @@ const commands = [
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Banea a un usuario.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.BanMembers)
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -143,6 +146,7 @@ const commands = [
     new SlashCommandBuilder()
         .setName("timeout")
         .setDescription("Aplica timeout a un usuario.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
         .addUserOption(option =>
             option
                 .setName("usuario")
@@ -246,17 +250,18 @@ function scheduleFunnyMessage() {
 
 const HELP_PAGES = [
     {
-        title: "Juegos y utilidades",
+        title: "Diversión y comandos públicos",
         description: [
-            "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
-            "`/ppt` Juega piedra, papel o tijera contra el bot.",
-            "`/ping` Comprueba la latencia del bot.",
-            "`/help` Abre esta guía de comandos."
+            "`/gato [oponente]` Juega tres en raya contra el bot o una persona. Disponible para todos.",
+            "`/ppt` Juega piedra, papel o tijera contra el bot. Disponible para todos.",
+            "`/ping` Comprueba la latencia del bot. Disponible para todos.",
+            "`/help` Abre esta guía. Disponible para todos."
         ].join("\n\n")
     },
     {
-        title: "Moderación",
+        title: "Moderación: requiere permisos",
         description: [
+            "Solo miembros con el permiso indicado pueden usar estos comandos. Los administradores también tienen acceso.",
             "`/clear cantidad` Elimina de 1 a 100 mensajes. Requiere Gestionar mensajes.",
             "`/kick usuario [razon]` Expulsa a una persona. Requiere Expulsar miembros.",
             "`/ban usuario [razon]` Banea a una persona. Requiere Banear miembros.",
