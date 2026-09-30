@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const {
     Client,
+    ActivityType,
     GatewayIntentBits,
     PermissionsBitField,
     REST,
@@ -14,6 +15,7 @@ const {
 // ===============================
 
 const TOKEN = process.env.DISCORD_TOKEN;
+const STREAM_URL = process.env.STREAM_URL;
 
 // Tiempo mínimo entre mensajes
 const MESSAGE_COOLDOWN = 5000;
@@ -174,6 +176,20 @@ client.once("ready", async () => {
     console.log(`Bot conectado como ${client.user.tag}`);
     console.log(`Servidores: ${client.guilds.cache.size}`);
     console.log("--------------------------------");
+
+    if (STREAM_URL) {
+        client.user.setPresence({
+            activities: [{
+                name: "Fuck server",
+                state: "estoy ocupado bro",
+                type: ActivityType.Streaming,
+                url: STREAM_URL
+            }],
+            status: "online"
+        });
+    } else {
+        console.warn("Define STREAM_URL en .env para activar el estado de transmisión.");
+    }
 
     await registerCommands();
 
