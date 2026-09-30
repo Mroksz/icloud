@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const {
     Client,
+    EmbedBuilder,
     ActivityType,
     ActionRowBuilder,
     ButtonBuilder,
@@ -19,7 +20,7 @@ const {
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const STREAM_URL = process.env.STREAM_URL;
-const FUNNY_CHANNEL_ID = "1530770440992194643";
+const CHAT_CHANNEL_ID = "1530770440992194643";
 const FUNNY_ROLE_ID = "1531550671285784770";
 const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
 const MAX_FUNNY_MESSAGE_DELAY = 5 * 60 * 60 * 1000;
@@ -76,6 +77,14 @@ const commands = [
     new SlashCommandBuilder()
         .setName("ping")
         .setDescription("Comprueba si el bot está funcionando."),
+
+    new SlashCommandBuilder()
+        .setName("ppt")
+        .setDescription("Juega piedra, papel o tijera contra el bot."),
+
+    new SlashCommandBuilder()
+        .setName("help")
+        .setDescription("Muestra los comandos del bot."),
 
     new SlashCommandBuilder()
         .setName("gato")
@@ -203,7 +212,7 @@ function scheduleFunnyMessage() {
 
         try {
 
-            const channel = await client.channels.fetch(FUNNY_CHANNEL_ID);
+            const channel = await client.channels.fetch(CHAT_CHANNEL_ID);
 
             if (!channel?.isTextBased()) {
                 throw new Error("El canal configurado no existe o no admite mensajes.");
@@ -235,6 +244,76 @@ function scheduleFunnyMessage() {
 
 }
 
+const HELP_PAGES = [
+    {
+        title: "Juegos y utilidades",
+        description: [
+            "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
+            "`/ppt` Juega piedra, papel o tijera contra el bot.",
+            "`/ping` Comprueba la latencia del bot.",
+            "`/help` Abre esta guía de comandos."
+        ].join("\n\n")
+    },
+    {
+        title: "Moderación",
+        description: [
+            "`/clear cantidad` Elimina de 1 a 100 mensajes. Requiere Gestionar mensajes.",
+            "`/kick usuario [razon]` Expulsa a una persona. Requiere Expulsar miembros.",
+            "`/ban usuario [razon]` Banea a una persona. Requiere Banear miembros.",
+            "`/timeout usuario minutos [razon]` Aplica un timeout. Requiere Moderar miembros."
+        ].join("\n\n")
+    }
+];
+
+function createHelpEmbed(pageIndex) {
+
+    const page = HELP_PAGES[pageIndex];
+
+    return new EmbedBuilder()
+        .setColor(0x2f9e8f)
+        .setTitle(page.title)
+        .setDescription(page.description)
+        .setFooter({ text: `Página ${pageIndex + 1} de ${HELP_PAGES.length}` });
+
+}
+
+function createHelpButtons(pageIndex, interactionId, disabled = false) {
+
+    return [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`help-${interactionId}-previous`)
+                .setLabel("Anterior")
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled || pageIndex === 0),
+            new ButtonBuilder()
+                .setCustomId(`help-${interactionId}-next`)
+                .setLabel("Siguiente")
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(disabled || pageIndex === HELP_PAGES.length - 1)
+        )
+    ];
+
+}
+
+function createRockPaperScissorsButtons(interactionId, disabled = false) {
+
+    const choices = ["piedra", "papel", "tijera"];
+
+    return [
+        new ActionRowBuilder().addComponents(
+            ...choices.map(choice =>
+                new ButtonBuilder()
+                    .setCustomId(`ppt-${interactionId}-${choice}`)
+                    .setLabel(choice[0].toUpperCase() + choice.slice(1))
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(disabled)
+            )
+        )
+    ];
+
+}
+
 // ===============================
 // BOT ENCENDIDO
 // ===============================
@@ -262,6 +341,34 @@ client.once("ready", async () => {
 
     scheduleFunnyMessage();
     await registerCommands();
+
+});
+
+client.on("guildMemberAdd", async member => {
+
+    if (member.user.bot || member.guild.name.trim().toLowerCase() !== "fuck") return;
+
+    try {
+
+        const channel = await client.channels.fetch(CHAT_CHANNEL_ID);
+
+        if (!channel?.isTextBased() || channel.guildId !== member.guild.id) {
+            throw new Error("El canal de bienvenida no pertenece al servidor configurado.");
+        }
+
+        await channel.send({
+            content: `¡Bienvenido, <@${member.id}>! Ya eres oficialmente parte del caos de **fuck**. Ponte cómodo y no le des de comer al bot.`,
+            allowedMentions: {
+                parse: [],
+                users: [member.id]
+            }
+        });
+
+    } catch (error) {
+
+        console.error("No pude enviar el mensaje de bienvenida:", error);
+
+    }
 
 });
 
@@ -580,6 +687,127 @@ client.on("interactionCreate", async interaction => {
         await interaction.reply(
             `🏓 Pong!\nLatencia: **${latency}ms**`
         );
+
+    }
+
+    // =================================
+    // AYUDA CON PAGINAS
+    // =================================
+
+    if (interaction.commandName === "help") {
+
+        let pageIndex = 0;
+
+        await interaction.reply({
+            embeds: [createHelpEmbed(pageIndex)],
+            components: createHelpButtons(pageIndex, interaction.id),
+            ephemeral: true
+        });
+
+        const helpMessage = await interaction.fetchReply();
+        const collector = helpMessage.createMessageComponentCollector({
+            time: 120000
+        });
+
+        collector.on("collect", async buttonInteraction => {
+
+            if (buttonInteraction.user.id !== interaction.user.id) {
+                return buttonInteraction.reply({
+                    content: "Esta ayuda pertenece a quien ejecutó el comando.",
+                    ephemeral: true
+                });
+            }
+
+            pageIndex = buttonInteraction.customId.endsWith("next")
+                ? Math.min(pageIndex + 1, HELP_PAGES.length - 1)
+                : Math.max(pageIndex - 1, 0);
+
+            await buttonInteraction.update({
+                embeds: [createHelpEmbed(pageIndex)],
+                components: createHelpButtons(pageIndex, interaction.id)
+            });
+
+        });
+
+        collector.on("end", async () => {
+
+            await interaction.editReply({
+                components: createHelpButtons(pageIndex, interaction.id, true)
+            }).catch(() => {});
+
+        });
+
+        return;
+
+    }
+
+    // =================================
+    // PIEDRA, PAPEL O TIJERA
+    // =================================
+
+    if (interaction.commandName === "ppt") {
+
+        await interaction.reply({
+            content: "Elige tu jugada. Tienes un minuto:",
+            components: createRockPaperScissorsButtons(interaction.id)
+        });
+
+        const gameMessage = await interaction.fetchReply();
+        const collector = gameMessage.createMessageComponentCollector({
+            time: 60000
+        });
+
+        collector.on("collect", async buttonInteraction => {
+
+            if (buttonInteraction.user.id !== interaction.user.id) {
+                return buttonInteraction.reply({
+                    content: "Esta ronda pertenece a quien usó /ppt.",
+                    ephemeral: true
+                });
+            }
+
+            const choice = buttonInteraction.customId.split("-").pop();
+            const choices = ["piedra", "papel", "tijera"];
+
+            if (!choices.includes(choice)) {
+                return buttonInteraction.reply({
+                    content: "Esa jugada no es válida.",
+                    ephemeral: true
+                });
+            }
+
+            const botChoice = choices[Math.floor(Math.random() * choices.length)];
+            const winningChoices = {
+                piedra: "tijera",
+                papel: "piedra",
+                tijera: "papel"
+            };
+            const result = choice === botChoice
+                ? "Empate, nadie pudo presumir esta vez."
+                : winningChoices[choice] === botChoice
+                    ? "¡Ganaste! El bot va a pedir la revancha."
+                    : "Ganó el bot. Exige una auditoría de sus manos digitales.";
+
+            await buttonInteraction.update({
+                content: `Tú: **${choice}** | Bot: **${botChoice}**\n${result}`,
+                components: createRockPaperScissorsButtons(interaction.id, true)
+            });
+            collector.stop("played");
+
+        });
+
+        collector.on("end", async (collected, reason) => {
+
+            if (reason !== "time" || collected.size > 0) return;
+
+            await interaction.editReply({
+                content: "Se acabó el tiempo. El bot gana por incomparecencia.",
+                components: createRockPaperScissorsButtons(interaction.id, true)
+            }).catch(() => {});
+
+        });
+
+        return;
 
     }
 
