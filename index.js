@@ -80,7 +80,13 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("ppt")
-        .setDescription("Juega piedra, papel o tijera contra el bot."),
+        .setDescription("Juega piedra, papel o tijera contra el bot o una persona.")
+        .addUserOption(option =>
+            option
+                .setName("oponente")
+                .setDescription("Persona contra la que quieres jugar; vacío para jugar contra el bot.")
+                .setRequired(false)
+        ),
 
     new SlashCommandBuilder()
         .setName("help")
@@ -253,7 +259,7 @@ const HELP_PAGES = [
         title: "Diversión y comandos públicos",
         description: [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona. Disponible para todos.",
-            "`/ppt` Juega piedra, papel o tijera contra el bot. Disponible para todos.",
+            "`/ppt [oponente]` Juega piedra, papel o tijera contra el bot o una persona. Disponible para todos.",
             "`/ping` Comprueba la latencia del bot. Disponible para todos.",
             "`/help` Abre esta guía. Disponible para todos."
         ].join("\n\n")
@@ -301,21 +307,39 @@ function createHelpButtons(pageIndex, interactionId, disabled = false) {
 
 }
 
-function createRockPaperScissorsButtons(interactionId, disabled = false) {
+function createRockPaperScissorsButtons(
+    interactionId,
+    choicesDisabled = false,
+    includeRematch = false,
+    rematchDisabled = false
+) {
 
     const choices = ["piedra", "papel", "tijera"];
-
-    return [
+    const rows = [
         new ActionRowBuilder().addComponents(
             ...choices.map(choice =>
                 new ButtonBuilder()
                     .setCustomId(`ppt-${interactionId}-${choice}`)
                     .setLabel(choice[0].toUpperCase() + choice.slice(1))
                     .setStyle(ButtonStyle.Primary)
-                    .setDisabled(disabled)
+                    .setDisabled(choicesDisabled)
             )
         )
     ];
+
+    if (includeRematch) {
+        rows.push(
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`ppt-${interactionId}-rematch`)
+                    .setLabel("Revancha")
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(rematchDisabled)
+            )
+        );
+    }
+
+    return rows;
 
 }
 
@@ -596,6 +620,18 @@ function createTicTacToeRows(board, gameId, disabled = false) {
 
 }
 
+function createTicTacToeRematchRow(gameId, disabled = false) {
+
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`gato-${gameId}-rematch`)
+            .setLabel("Revancha")
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(disabled)
+    );
+
+}
+
 function getTicTacToeWinner(board) {
 
     const winningLines = [
@@ -752,27 +788,83 @@ client.on("interactionCreate", async interaction => {
 
     if (interaction.commandName === "ppt") {
 
+        const opponent = interaction.options.getUser("oponente");
+
+        if (opponent?.id === interaction.user.id) {
+            return interaction.reply({
+                content: "No puedes jugar contra ti mismo.",
+                ephemeral: true
+            });
+        }
+
+        if (opponent?.bot) {
+            return interaction.reply({
+                content: "Elige a una persona o deja el oponente vacío para jugar contra el bot.",
+                ephemeral: true
+            });
+        }
+
+        const choices = ["piedra", "papel", "tijera"];
+        const winningChoices = {
+            piedra: "tijera",
+            papel: "piedra",
+            tijera: "papel"
+        };
+        const playerIds = [interaction.user.id, ...(opponent ? [opponent.id] : [])];
+        const playerChoices = new Map();
+        let roundFinished = false;
+
+        const createPrompt = () => opponent
+            ? `${interaction.user} retó a ${opponent} a piedra, papel o tijera. Elijan sin mirar la jugada del otro.`
+            : `${interaction.user}, elige tu jugada contra el bot:`;
+
         await interaction.reply({
-            content: "Elige tu jugada. Tienes un minuto:",
-            components: createRockPaperScissorsButtons(interaction.id)
+            content: createPrompt(),
+            components: createRockPaperScissorsButtons(interaction.id),
+            allowedMentions: { parse: [], users: playerIds }
         });
 
         const gameMessage = await interaction.fetchReply();
         const collector = gameMessage.createMessageComponentCollector({
-            time: 60000
+            time: 120000
         });
 
         collector.on("collect", async buttonInteraction => {
 
-            if (buttonInteraction.user.id !== interaction.user.id) {
+            if (!playerIds.includes(buttonInteraction.user.id)) {
                 return buttonInteraction.reply({
-                    content: "Esta ronda pertenece a quien usó /ppt.",
+                    content: "No participas en esta partida.",
                     ephemeral: true
                 });
             }
 
             const choice = buttonInteraction.customId.split("-").pop();
-            const choices = ["piedra", "papel", "tijera"];
+
+            if (choice === "rematch") {
+                if (!roundFinished) {
+                    return buttonInteraction.reply({
+                        content: "La ronda todavía no termina.",
+                        ephemeral: true
+                    });
+                }
+
+                playerChoices.clear();
+                roundFinished = false;
+                collector.resetTimer();
+
+                return buttonInteraction.update({
+                    content: createPrompt(),
+                    components: createRockPaperScissorsButtons(interaction.id),
+                    allowedMentions: { parse: [], users: playerIds }
+                });
+            }
+
+            if (roundFinished) {
+                return buttonInteraction.reply({
+                    content: "La ronda terminó. Pulsa Revancha para jugar otra vez.",
+                    ephemeral: true
+                });
+            }
 
             if (!choices.includes(choice)) {
                 return buttonInteraction.reply({
@@ -781,34 +873,78 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            const botChoice = choices[Math.floor(Math.random() * choices.length)];
-            const winningChoices = {
-                piedra: "tijera",
-                papel: "piedra",
-                tijera: "papel"
-            };
-            const result = choice === botChoice
+            if (playerChoices.has(buttonInteraction.user.id)) {
+                return buttonInteraction.reply({
+                    content: "Ya elegiste; espera a que termine la ronda.",
+                    ephemeral: true
+                });
+            }
+
+            playerChoices.set(buttonInteraction.user.id, choice);
+
+            if (!opponent) {
+                const botChoice = choices[Math.floor(Math.random() * choices.length)];
+                const result = choice === botChoice
+                    ? "Empate, nadie pudo presumir esta vez."
+                    : winningChoices[choice] === botChoice
+                        ? "¡Ganaste! El bot va a pedir la revancha."
+                        : "Ganó el bot. Exige una auditoría de sus manos digitales.";
+
+                roundFinished = true;
+
+                return buttonInteraction.update({
+                    content: `Tú: **${choice}** | Bot: **${botChoice}**\n${result}`,
+                    components: createRockPaperScissorsButtons(interaction.id, true, true),
+                    allowedMentions: { parse: [], users: playerIds }
+                });
+            }
+
+            if (playerChoices.size < playerIds.length) {
+                const waitingFor = buttonInteraction.user.id === interaction.user.id
+                    ? opponent
+                    : interaction.user;
+
+                return buttonInteraction.update({
+                    content: `${buttonInteraction.user} ya eligió. Esperando a ${waitingFor}.`,
+                    components: createRockPaperScissorsButtons(interaction.id),
+                    allowedMentions: { parse: [], users: playerIds }
+                });
+            }
+
+            const firstChoice = playerChoices.get(interaction.user.id);
+            const secondChoice = playerChoices.get(opponent.id);
+            const result = firstChoice === secondChoice
                 ? "Empate, nadie pudo presumir esta vez."
-                : winningChoices[choice] === botChoice
-                    ? "¡Ganaste! El bot va a pedir la revancha."
-                    : "Ganó el bot. Exige una auditoría de sus manos digitales.";
+                : winningChoices[firstChoice] === secondChoice
+                    ? `¡Ganó ${interaction.user}!`
+                    : `¡Ganó ${opponent}!`;
+
+            roundFinished = true;
 
             await buttonInteraction.update({
-                content: `Tú: **${choice}** | Bot: **${botChoice}**\n${result}`,
-                components: createRockPaperScissorsButtons(interaction.id, true)
+                content: `${interaction.user}: **${firstChoice}** | ${opponent}: **${secondChoice}**\n${result}`,
+                components: createRockPaperScissorsButtons(interaction.id, true, true),
+                allowedMentions: { parse: [], users: playerIds }
             });
-            collector.stop("played");
 
         });
 
-        collector.on("end", async (collected, reason) => {
+        collector.on("end", async (_, reason) => {
 
-            if (reason !== "time" || collected.size > 0) return;
+            if (reason !== "time") return;
 
-            await interaction.editReply({
-                content: "Se acabó el tiempo. El bot gana por incomparecencia.",
-                components: createRockPaperScissorsButtons(interaction.id, true)
-            }).catch(() => {});
+            if (!roundFinished) {
+                roundFinished = true;
+                await interaction.editReply({
+                    content: "Se acabó el tiempo. La ronda quedó sin terminar.",
+                    components: createRockPaperScissorsButtons(interaction.id, true),
+                    allowedMentions: { parse: [], users: playerIds }
+                }).catch(() => {});
+            } else {
+                await interaction.editReply({
+                    components: createRockPaperScissorsButtons(interaction.id, true, true, true)
+                }).catch(() => {});
+            }
 
         });
 
@@ -864,6 +1000,33 @@ client.on("interactionCreate", async interaction => {
             if (!playerIds.includes(buttonInteraction.user.id)) {
                 return buttonInteraction.reply({
                     content: "No participas en esta partida.",
+                    ephemeral: true
+                });
+            }
+
+            if (buttonInteraction.customId === `gato-${gameId}-rematch`) {
+                if (!gameOver) {
+                    return buttonInteraction.reply({
+                        content: "La partida todavía no termina.",
+                        ephemeral: true
+                    });
+                }
+
+                board.fill(null);
+                gameOver = false;
+                currentPlayerId = interaction.user.id;
+                collector.resetTimer();
+
+                return buttonInteraction.update({
+                    content: createContent(`Turno de ${interaction.user} (X).`),
+                    components: createTicTacToeRows(board, gameId),
+                    allowedMentions: { users: playerIds }
+                });
+            }
+
+            if (gameOver) {
+                return buttonInteraction.reply({
+                    content: "La partida terminó. Pulsa Revancha para jugar otra vez.",
                     ephemeral: true
                 });
             }
@@ -925,15 +1088,16 @@ client.on("interactionCreate", async interaction => {
                         : interaction.user.id;
             }
 
-            if (gameOver) {
-                collector.stop("finished");
-            }
-
             const status = resultText || `Turno de ${currentPlayerId === interaction.user.id ? `${interaction.user} (X)` : `${opponent} (O)`}.`;
 
             await buttonInteraction.update({
                 content: createContent(status),
-                components: createTicTacToeRows(board, gameId, gameOver),
+                components: gameOver
+                    ? [
+                        ...createTicTacToeRows(board, gameId, true),
+                        createTicTacToeRematchRow(gameId)
+                    ]
+                    : createTicTacToeRows(board, gameId),
                 allowedMentions: { users: playerIds }
             });
 
@@ -941,15 +1105,24 @@ client.on("interactionCreate", async interaction => {
 
         collector.on("end", async (_, reason) => {
 
-            if (reason !== "time" || gameOver) return;
+            if (reason !== "time") return;
 
-            gameOver = true;
+            if (!gameOver) {
+                gameOver = true;
 
-            await interaction.editReply({
-                content: createContent("Partida finalizada por inactividad."),
-                components: createTicTacToeRows(board, gameId, true),
-                allowedMentions: { users: playerIds }
-            }).catch(() => {});
+                await interaction.editReply({
+                    content: createContent("Partida finalizada por inactividad."),
+                    components: createTicTacToeRows(board, gameId, true),
+                    allowedMentions: { users: playerIds }
+                }).catch(() => {});
+            } else {
+                await interaction.editReply({
+                    components: [
+                        ...createTicTacToeRows(board, gameId, true),
+                        createTicTacToeRematchRow(gameId, true)
+                    ]
+                }).catch(() => {});
+            }
 
         });
 
