@@ -185,7 +185,7 @@ client.once("ready", async () => {
                 type: ActivityType.Streaming,
                 url: STREAM_URL
             }],
-            status: "online"
+            status: "dnd"
         });
     } else {
         console.warn("Define STREAM_URL en .env para activar el estado de transmisión.");
