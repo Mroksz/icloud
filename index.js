@@ -19,7 +19,6 @@ const {
 // ===============================
 
 const TOKEN = process.env.DISCORD_TOKEN;
-const STREAM_URL = process.env.STREAM_URL;
 const CHAT_CHANNEL_ID = "1530770440992194643";
 const FUNNY_ROLE_ID = "1531550671285784770";
 const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
@@ -32,7 +31,40 @@ const FUNNY_MESSAGES = [
     "Fui a buscar motivación y volví con hambre.",
     "Tengo un plan perfecto. Solo falta recordar cuál era.",
     "Mi nivel de energía está en modo ahorro, como el celular al 2%.",
-    "Si pensar contara como ejercicio, ya habría terminado la rutina de hoy."
+    "Si pensar contara como ejercicio, ya habría terminado la rutina de hoy.",
+    "Mi calendario dice que hoy toca brillar; le voy a pedir que lo reprograme.",
+    "Abrí la nevera por tercera vez, por si la cena había aparecido por actualización.",
+    "Estoy en decadencia, pero al menos la caída tiene buena iluminación.",
+    "Mi productividad y yo estamos en una relación a distancia.",
+    "Hoy hice una lista de pendientes y ya me cansé de verla.",
+    "El entusiasmo llegó, vio mis pendientes y se fue sin despedirse.",
+    "Tengo sueño acumulado para abrir una sucursal.",
+    "Mi fuerza de voluntad está cargando; tiempo estimado: desconocido.",
+    "Quise ordenar mi vida y terminé ordenando los iconos del escritorio.",
+    "Mi yo del futuro acaba de rechazar otra tarea que le dejé.",
+    "El lunes me prometió cambios y ya estamos negociando otra vez.",
+    "Mi cerebro puso una canción en repetición y olvidó el resto del día.",
+    "Estoy a una notificación de cerrar todo y convertirme en leyenda local.",
+    "Hoy avancé muchísimo: ahora sé exactamente qué cosas no hice.",
+    "La motivación está en línea, pero no responde mis mensajes.",
+    "Mi rutina saludable empieza mañana desde hace varias semanas.",
+    "Me levanté con energía y la gasté buscando dónde había dejado el celular.",
+    "Mi escritorio tiene capas históricas de decisiones para después.",
+    "Quise tomar las riendas del día, pero el día iba en otra dirección.",
+    "Tengo tantas pestañas abiertas que mi navegador ya necesita terapia.",
+    "Mi plan de hoy era simple; luego aparecí yo para complicarlo.",
+    "La alarma sonó y ambos decidimos que todavía no era nuestro momento.",
+    "Estoy ahorrando energía para una ocasión especial que nunca especificaron.",
+    "Mi lista de tareas ya tiene más temporadas que una serie larga.",
+    "Me iba a concentrar, pero un pensamiento secundario pidió el micrófono.",
+    "Hoy mi gran logro fue recordar por qué entré a esta habitación.",
+    "El café no arregla mis problemas, pero hace que los lea más rápido.",
+    "Mi paciencia salió un momento y dejó el estado en no molestar.",
+    "Estoy tan organizado que perdí la lista donde anoté cómo organizarme.",
+    "Quise descansar cinco minutos y desperté en el siguiente capítulo.",
+    "El modo adulto está instalado, pero todavía no encuentro dónde se abre.",
+    "Mi cerebro aceptó los términos y condiciones sin leer la parte de madrugar.",
+    "Hoy voy lento, pero con una confianza que no está respaldada por los hechos."
 ];
 
 // Tiempo mínimo entre mensajes
@@ -77,6 +109,16 @@ const commands = [
     new SlashCommandBuilder()
         .setName("ping")
         .setDescription("Comprueba si el bot está funcionando."),
+
+    new SlashCommandBuilder()
+        .setName("8ball")
+        .setDescription("Consulta la bola mágica y descubre la probabilidad.")
+        .addStringOption(option =>
+            option
+                .setName("pregunta")
+                .setDescription("La pregunta que quieres hacerle a la bola mágica.")
+                .setRequired(true)
+        ),
 
     new SlashCommandBuilder()
         .setName("ppt")
@@ -260,6 +302,7 @@ const HELP_PAGES = [
         description: [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona. Disponible para todos.",
             "`/ppt [oponente]` Juega piedra, papel o tijera contra el bot o una persona. Disponible para todos.",
+            "`/8ball pregunta` Consulta una respuesta y su probabilidad. Disponible para todos.",
             "`/ping` Comprueba la latencia del bot. Disponible para todos.",
             "`/help` Abre esta guía. Disponible para todos."
         ].join("\n\n")
@@ -354,19 +397,14 @@ client.once("ready", async () => {
     console.log(`Servidores: ${client.guilds.cache.size}`);
     console.log("--------------------------------");
 
-    if (STREAM_URL) {
-        client.user.setPresence({
-            activities: [{
-                name: "Fuck server",
-                state: "estoy ocupado bro",
-                type: ActivityType.Streaming,
-                url: STREAM_URL
-            }],
-            status: "dnd"
-        });
-    } else {
-        console.warn("Define STREAM_URL en .env para activar el estado de transmisión.");
-    }
+    client.user.setPresence({
+        activities: [{
+            name: "estoy en decadencia",
+            state: "estoy en decadencia",
+            type: ActivityType.Custom
+        }],
+        status: "dnd"
+    });
 
     scheduleFunnyMessage();
     await registerCommands();
@@ -716,6 +754,27 @@ function findTicTacToeBotMove(board) {
 client.on("interactionCreate", async interaction => {
 
     if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === "8ball") {
+
+        const question = interaction.options.getString("pregunta", true);
+        const probability = Math.floor(Math.random() * 101);
+        const answer = probability < 20
+            ? "Las señales dicen que no."
+            : probability < 40
+                ? "Parece poco probable."
+                : probability < 60
+                    ? "La bola no puede decidirse todavía."
+                    : probability < 80
+                        ? "Todo apunta a que sí."
+                        : "Es casi seguro que sí.";
+
+        return interaction.reply({
+            content: `**Pregunta:** ${question}\n**Probabilidad:** ${probability}%\n${answer}`,
+            allowedMentions: { parse: [] }
+        });
+
+    }
 
     // =================================
     // PING
