@@ -100,6 +100,23 @@ const userCooldowns = new Map();
 const userWarnings = new Map();
 const userLastMessages = new Map();
 
+const HOMERO_GIF_URL = "https://klipy.com/gifs/homero-laburo";
+const BOT_NEGATIVE_WORDS = /\b(inutil\w*|idiota\w*|estupid\w*|tont[oa]s?|mal\w*|incompetente\w*|inservible\w*|patet\w*|basura|mierda|callate|callen|silencio|odio|muere|apest\w*|no\s+(sirv\w*|funcion\w*|val\w*))\b/;
+
+function isMessageAgainstBot(message) {
+
+    const content = message.content
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    const mentionsBot = message.mentions.has(message.client.user)
+        || new RegExp(`\\b(bot|robot)\\b|<@!?${message.client.user.id}>`).test(content);
+    const hasSalaryCut = /\b(baj\w*|reduc\w*|recort\w*)\b.{0,40}\b(sueldo|salario|paga)\b|\b(sueldo|salario|paga)\b.{0,40}\b(baj\w*|reduc\w*|recort\w*)\b/.test(content);
+    const saysSleep = /\b(dorm\w*|duerm\w*)\b/.test(content);
+
+    return mentionsBot && (hasSalaryCut || saysSleep || BOT_NEGATIVE_WORDS.test(content));
+}
+
 // ===============================
 // COMANDOS
 // ===============================
@@ -450,6 +467,21 @@ client.on("messageCreate", async message => {
 
     // Ignorar mensajes privados
     if (!message.guild) return;
+
+    if (isMessageAgainstBot(message)) {
+
+        try {
+
+            await message.channel.send(`jaja este w\n${HOMERO_GIF_URL}`);
+
+        } catch (error) {
+
+            console.error("No pude responder al mensaje contra el bot:", error);
+
+        }
+
+        return;
+    }
 
     const userId = message.author.id;
 
