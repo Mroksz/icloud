@@ -101,7 +101,28 @@ const userWarnings = new Map();
 const userLastMessages = new Map();
 
 const HOMERO_GIF_URL = "https://klipy.com/gifs/homero-laburo";
-const BOT_NEGATIVE_WORDS = /\b(inutil\w*|idiota\w*|estupid\w*|tont[oa]s?|mal\w*|incompetente\w*|inservible\w*|patet\w*|basura|mierda|callate|callen|silencio|odio|muere|apest\w*|no\s+(sirv\w*|funcion\w*|val\w*))\b/;
+const BOT_REPLY_MESSAGES = [
+    "Soy adorable, pero igual malo >:D",
+    "Me mencionaste; ya puedes proceder con tu solicitud y tus disculpas.",
+    "No soy malo, solo estoy en mi arco de villano.",
+    "Estoy hecho de código, café imaginario y malas decisiones.",
+    "Te leo. Mi abogado robot recomienda que seas amable.",
+    "Atendiendo... primero debo fingir que no vi eso.",
+    "Claro que sí. Aunque mi última neurona está en una reunión.",
+    "Soy un bot de alto rendimiento... en teoría."
+];
+const WELCOME_MESSAGES = [
+    memberId => `¡Bienvenido, <@${memberId}>! El caos ya tiene refuerzos.`,
+    memberId => `¡Llegó <@${memberId}>! Ponte cómodo; el bot ya estaba hablando solo.`,
+    memberId => `¡Bienvenido a bordo, <@${memberId}>! La cordura es opcional y el caos viene incluido.`,
+    memberId => `¡Se sumó <@${memberId}>! Ahora somos oficialmente más que los errores del bot.`,
+    memberId => `¡Hola, <@${memberId}>! Si el bot te saluda primero, no significa que sepa lo que hace.`
+];
+
+function pickRandomMessage(messages) {
+
+    return messages[Math.floor(Math.random() * messages.length)];
+}
 
 function isMessageAgainstBot(message) {
 
@@ -111,10 +132,8 @@ function isMessageAgainstBot(message) {
         .toLowerCase();
     const mentionsBot = message.mentions.has(message.client.user)
         || new RegExp(`\\b(bot|robot)\\b|<@!?${message.client.user.id}>`).test(content);
-    const hasSalaryCut = /\b(baj\w*|reduc\w*|recort\w*)\b.{0,40}\b(sueldo|salario|paga)\b|\b(sueldo|salario|paga)\b.{0,40}\b(baj\w*|reduc\w*|recort\w*)\b/.test(content);
-    const saysSleep = /\b(dorm\w*|duerm\w*)\b/.test(content);
 
-    return mentionsBot && (hasSalaryCut || saysSleep || BOT_NEGATIVE_WORDS.test(content));
+    return mentionsBot;
 }
 
 // ===============================
@@ -441,7 +460,7 @@ client.on("guildMemberAdd", async member => {
         }
 
         await channel.send({
-            content: `¡Bienvenido, <@${member.id}>! Ya eres oficialmente parte del caos de **fuck**. Ponte cómodo y no le des de comer al bot.`,
+            content: pickRandomMessage(WELCOME_MESSAGES)(member.id),
             allowedMentions: {
                 parse: [],
                 users: [member.id]
@@ -472,7 +491,7 @@ client.on("messageCreate", async message => {
 
         try {
 
-            await message.channel.send(`jaja este w\n${HOMERO_GIF_URL}`);
+            await message.channel.send(`${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${HOMERO_GIF_URL}`);
 
         } catch (error) {
 
