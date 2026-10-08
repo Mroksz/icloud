@@ -1,5 +1,8 @@
 require("dotenv").config();
 
+const fs = require("node:fs");
+const path = require("node:path");
+
 const {
     Client,
     EmbedBuilder,
@@ -79,6 +82,297 @@ const TIMEOUT_DURATION = 60 * 1000;
 // Máximo de mensajes iguales consecutivos
 const MAX_DUPLICATE_MESSAGES = 3;
 
+const ECONOMY_FILE = path.join(__dirname, "economy.json");
+const STARTING_BALANCE = 1000;
+const MINIMUM_BET = 10;
+const WORK_COOLDOWN = 60 * 60 * 1000;
+const STEAL_COOLDOWN = 3 * 60 * 60 * 1000;
+const PESO_FORMATTER = new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    maximumFractionDigits: 0
+});
+const RED_ROULETTE_NUMBERS = new Set([
+    1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36
+]);
+const WORK_JOBS = [
+    { name: "repartidor de tacos", minimum: 120, maximum: 280 },
+    { name: "mecánico de naves espaciales", minimum: 180, maximum: 360 },
+    { name: "probador de sillas", minimum: 90, maximum: 220 },
+    { name: "guardia del último tamal", minimum: 150, maximum: 320 },
+    { name: "traductor de maullidos", minimum: 110, maximum: 300 },
+    { name: "cazador de bugs", minimum: 200, maximum: 400 }
+];
+
+function loadEconomyData() {
+
+    if (!fs.existsSync(ECONOMY_FILE)) return {};
+
+    const data = JSON.parse(fs.readFileSync(ECONOMY_FILE, "utf8"));
+
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new Error("El archivo de economía no contiene un objeto válido.");
+    }
+
+    return data;
+}
+
+let economyData = loadEconomyData();
+
+function saveEconomyData() {
+
+    const temporaryFile = `${ECONOMY_FILE}.tmp`;
+    fs.writeFileSync(temporaryFile, JSON.stringify(economyData, null, 2), "utf8");
+    fs.renameSync(temporaryFile, ECONOMY_FILE);
+}
+
+function getEconomyAccount(guildId, userId) {
+
+    if (!economyData[guildId] || typeof economyData[guildId] !== "object") {
+        economyData[guildId] = {};
+    }
+
+    if (!economyData[guildId][userId]) {
+        economyData[guildId][userId] = {
+            balance: STARTING_BALANCE,
+            lastWorkAt: 0,
+            lastStealAt: 0
+        };
+        saveEconomyData();
+    }
+
+    return economyData[guildId][userId];
+}
+
+function formatPesos(amount) {
+
+    return PESO_FORMATTER.format(amount);
+}
+
+function createEconomyEmbed(title, description, color = 0x2f9e8f) {
+
+    return new EmbedBuilder()
+        .setColor(color)
+        .setTitle(title)
+        .setDescription(description)
+        .setFooter({ text: "Economía del servidor · Pesos mexicanos" });
+}
+
+async function replyEconomyError(interaction, description) {
+
+    return interaction.reply({
+        embeds: [createEconomyEmbed("⚠️ No se pudo completar", description, 0xd97706)],
+        ephemeral: true
+    });
+}
+
+async function handleEconomyCommand(interaction) {
+
+    const economyCommands = ["saldo", "trabajar", "ruleta", "apostar", "robar", "top"];
+
+    if (!economyCommands.includes(interaction.commandName)) return false;
+
+    if (!interaction.guild) {
+        await replyEconomyError(interaction, "La economía solo está disponible dentro de un servidor.");
+        return true;
+    }
+
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+
+    if (interaction.commandName === "saldo") {
+
+        const target = interaction.options.getUser("usuario") || interaction.user;
+        const account = getEconomyAccount(guildId, target.id);
+
+        await interaction.reply({
+            embeds: [createEconomyEmbed(
+                `👛 Cartera de ${target.username}`,
+                `**Saldo:** ${formatPesos(account.balance)}\nSigue trabajando para llenar esa cartera. 💸`
+            )],
+            allowedMentions: { parse: [] }
+        });
+        return true;
+    }
+
+    if (interaction.commandName === "trabajar") {
+
+        const account = getEconomyAccount(guildId, userId);
+        const now = Date.now();
+        const remaining = WORK_COOLDOWN - (now - account.lastWorkAt);
+
+        if (remaining > 0) {
+            await replyEconomyError(interaction, `Ya terminaste tu turno. Vuelve en **${Math.ceil(remaining / 60000)} min**. 🕒`);
+            return true;
+        }
+
+        const job = pickRandomMessage(WORK_JOBS);
+        const earnings = Math.floor(Math.random() * (job.maximum - job.minimum + 1)) + job.minimum;
+        account.balance += earnings;
+        account.lastWorkAt = now;
+        saveEconomyData();
+
+        await interaction.reply({
+            embeds: [createEconomyEmbed(
+                "🧰 Turno terminado",
+                `Trabajaste como **${job.name}** y ganaste **${formatPesos(earnings)}**.\n` +
+                `💰 Nuevo saldo: **${formatPesos(account.balance)}**`
+            )]
+        });
+        return true;
+    }
+
+    if (interaction.commandName === "ruleta" || interaction.commandName === "apostar") {
+
+        const account = getEconomyAccount(guildId, userId);
+        const bet = interaction.options.getInteger("apuesta", true);
+
+        if (bet < MINIMUM_BET) {
+            await replyEconomyError(interaction, `La apuesta mínima es **${formatPesos(MINIMUM_BET)}**.`);
+            return true;
+        }
+
+        if (bet > account.balance) {
+            await replyEconomyError(interaction, `No tienes suficiente. Tu saldo es **${formatPesos(account.balance)}**.`);
+            return true;
+        }
+
+        account.balance -= bet;
+
+        if (interaction.commandName === "ruleta") {
+
+            const chosenColor = interaction.options.getString("color", true);
+            const number = Math.floor(Math.random() * 37);
+            const landedColor = number === 0
+                ? "verde"
+                : RED_ROULETTE_NUMBERS.has(number)
+                    ? "rojo"
+                    : "negro";
+            const won = chosenColor === landedColor;
+            const payout = won ? bet * (landedColor === "verde" ? 14 : 2) : 0;
+            account.balance += payout;
+            saveEconomyData();
+
+            await interaction.reply({
+                embeds: [createEconomyEmbed(
+                    won ? "🎉 ¡La ruleta pagó!" : "🎰 La casa ganó esta vez",
+                    `Salió **${number} ${landedColor}**. Elegiste **${chosenColor}**.\n` +
+                    (won
+                        ? `Ganancia neta: **${formatPesos(payout - bet)}**. 💵\n`
+                        : `Perdiste **${formatPesos(bet)}**. 🍀\n`) +
+                    `👛 Saldo: **${formatPesos(account.balance)}**`,
+                    won ? 0x2f9e8f : 0xc2413b
+                )]
+            });
+            return true;
+        }
+
+        const chosenSide = interaction.options.getString("lado", true);
+        const landedSide = Math.random() < 0.5 ? "cara" : "cruz";
+        const won = chosenSide === landedSide;
+        const payout = won ? bet * 2 : 0;
+        account.balance += payout;
+        saveEconomyData();
+
+        await interaction.reply({
+            embeds: [createEconomyEmbed(
+                won ? "🪙 ¡Ganaste la apuesta!" : "🪙 Esta vez ganó la moneda",
+                `Salió **${landedSide}** y elegiste **${chosenSide}**.\n` +
+                (won
+                    ? `Ganancia neta: **${formatPesos(bet)}**. 💸\n`
+                    : `Perdiste **${formatPesos(bet)}**.\n`) +
+                `👛 Saldo: **${formatPesos(account.balance)}**`,
+                won ? 0x2f9e8f : 0xc2413b
+            )]
+        });
+        return true;
+    }
+
+    if (interaction.commandName === "robar") {
+
+        const targetUser = interaction.options.getUser("usuario", true);
+
+        if (targetUser.id === userId) {
+            await replyEconomyError(interaction, "No puedes robarte a ti mismo. Tu cartera ya está bastante nerviosa. 😅");
+            return true;
+        }
+
+        if (targetUser.bot) {
+            await replyEconomyError(interaction, "Los bots no llevan cartera... todavía. 🤖");
+            return true;
+        }
+
+        const thief = getEconomyAccount(guildId, userId);
+        const target = getEconomyAccount(guildId, targetUser.id);
+        const now = Date.now();
+        const remaining = STEAL_COOLDOWN - (now - thief.lastStealAt);
+
+        if (remaining > 0) {
+            await replyEconomyError(interaction, `La policía aún te vigila. Inténtalo en **${Math.ceil(remaining / 60000)} min**. 🚨`);
+            return true;
+        }
+
+        if (target.balance < 1) {
+            await replyEconomyError(interaction, "Esa cartera está vacía. Busca un objetivo con más suerte. 👛");
+            return true;
+        }
+
+        thief.lastStealAt = now;
+
+        if (Math.random() < 0.4) {
+            const percentage = 0.05 + Math.random() * 0.1;
+            const stolen = Math.min(target.balance, Math.max(1, Math.floor(target.balance * percentage)));
+            target.balance -= stolen;
+            thief.balance += stolen;
+            saveEconomyData();
+
+            await interaction.reply({
+                embeds: [createEconomyEmbed(
+                    "🥷 ¡Golpe exitoso!",
+                    `Le robaste **${formatPesos(stolen)}** a ${targetUser}.\n` +
+                    `👛 Tu saldo: **${formatPesos(thief.balance)}** · ${targetUser}: **${formatPesos(target.balance)}**`
+                )],
+                allowedMentions: { parse: [] }
+            });
+        } else {
+            const fine = Math.min(thief.balance, Math.max(10, Math.floor(thief.balance * 0.1)));
+            thief.balance -= fine;
+            saveEconomyData();
+
+            await interaction.reply({
+                embeds: [createEconomyEmbed(
+                    "🚨 ¡Te atraparon!",
+                    `El robo falló y pagaste una multa de **${formatPesos(fine)}**.\n` +
+                    `Probabilidad de éxito: **40%**. Saldo: **${formatPesos(thief.balance)}**. 😬`,
+                    0xc2413b
+                )]
+            });
+        }
+        return true;
+    }
+
+    if (interaction.commandName === "top") {
+
+        const accounts = Object.entries(economyData[guildId] || {})
+            .filter(([, account]) => Number.isSafeInteger(account.balance) && account.balance >= 0)
+            .sort((first, second) => second[1].balance - first[1].balance)
+            .slice(0, 10);
+        const leaderboard = accounts.length
+            ? accounts.map(([id, account], index) =>
+                `**${index + 1}.** <@${id}> · ${formatPesos(account.balance)}`
+            ).join("\n")
+            : "Todavía no hay cuentas. Usa `/trabajar` para inaugurar la economía. 🧰";
+
+        await interaction.reply({
+            embeds: [createEconomyEmbed("🏆 Top 10 · Mayores fortunas", leaderboard)],
+            allowedMentions: { parse: [] }
+        });
+        return true;
+    }
+
+    return false;
+}
+
 // ===============================
 // CLIENTE
 // ===============================
@@ -131,9 +425,13 @@ function isMessageAgainstBot(message) {
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase();
     const mentionsBot = message.mentions.has(message.client.user)
+        || message.mentions.users.has(message.client.user.id)
+        || message.mentions.repliedUser?.id === message.client.user.id
         || new RegExp(`\\b(bot|robot)\\b|<@!?${message.client.user.id}>`).test(content);
+    const saysSleep = /\b(duermalo|duermelo|dormilo|dormirlo)\b/.test(content);
+    const saysLowerSalary = /\b(baj\w*|reduc\w*|recort\w*)\b.{0,40}\b(sueldo|salario|paga)\b|\b(sueldo|salario|paga)\b.{0,40}\b(baj\w*|reduc\w*|recort\w*)\b/.test(content);
 
-    return mentionsBot;
+    return mentionsBot || saysSleep || saysLowerSalary;
 }
 
 // ===============================
@@ -141,6 +439,79 @@ function isMessageAgainstBot(message) {
 // ===============================
 
 const commands = [
+
+    new SlashCommandBuilder()
+        .setName("saldo")
+        .setDescription("Consulta tu cartera o la de otra persona.")
+        .addUserOption(option =>
+            option
+                .setName("usuario")
+                .setDescription("Persona cuya cartera quieres consultar.")
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("trabajar")
+        .setDescription("Trabaja en un empleo aleatorio y cobra tu sueldo."),
+
+    new SlashCommandBuilder()
+        .setName("ruleta")
+        .setDescription("Apuesta pesos al rojo, negro o verde en la ruleta.")
+        .addIntegerOption(option =>
+            option
+                .setName("apuesta")
+                .setDescription("Cantidad de pesos a apostar.")
+                .setRequired(true)
+                .setMinValue(MINIMUM_BET)
+                .setMaxValue(1000000)
+        )
+        .addStringOption(option =>
+            option
+                .setName("color")
+                .setDescription("Color al que quieres apostar.")
+                .setRequired(true)
+                .addChoices(
+                    { name: "Rojo", value: "rojo" },
+                    { name: "Negro", value: "negro" },
+                    { name: "Verde (0)", value: "verde" }
+                )
+        ),
+
+    new SlashCommandBuilder()
+        .setName("apostar")
+        .setDescription("Apuesta a cara o cruz y duplica tu apuesta si aciertas.")
+        .addIntegerOption(option =>
+            option
+                .setName("apuesta")
+                .setDescription("Cantidad de pesos a apostar.")
+                .setRequired(true)
+                .setMinValue(MINIMUM_BET)
+                .setMaxValue(1000000)
+        )
+        .addStringOption(option =>
+            option
+                .setName("lado")
+                .setDescription("Elige cara o cruz.")
+                .setRequired(true)
+                .addChoices(
+                    { name: "Cara", value: "cara" },
+                    { name: "Cruz", value: "cruz" }
+                )
+        ),
+
+    new SlashCommandBuilder()
+        .setName("robar")
+        .setDescription("Intenta robar entre el 5% y 15% de una cartera.")
+        .addUserOption(option =>
+            option
+                .setName("usuario")
+                .setDescription("Persona a quien intentas robar.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("top")
+        .setDescription("Muestra las 10 mayores fortunas del servidor."),
 
     new SlashCommandBuilder()
         .setName("ping")
@@ -334,13 +705,24 @@ function scheduleFunnyMessage() {
 
 const HELP_PAGES = [
     {
-        title: "Diversión y comandos públicos",
+        title: "💰 Economía · Pesos mexicanos",
         description: [
-            "`/gato [oponente]` Juega tres en raya contra el bot o una persona. Disponible para todos.",
-            "`/ppt [oponente]` Juega piedra, papel o tijera contra el bot o una persona. Disponible para todos.",
-            "`/8ball pregunta` Consulta una respuesta y su probabilidad. Disponible para todos.",
-            "`/ping` Comprueba la latencia del bot. Disponible para todos.",
-            "`/help` Abre esta guía. Disponible para todos."
+            "`/saldo [usuario]` Consulta tu cartera. Las cuentas nuevas empiezan con $1,000 MXN.",
+            "`/trabajar` Cobra por un empleo aleatorio. Tiene 1 hora de espera.",
+            "`/ruleta apuesta color` Apuesta al rojo, negro o verde; verde paga 14x.",
+            "`/apostar apuesta lado` Juega cara o cruz; acertar devuelve 2x.",
+            "`/robar usuario` Tienes 40% de éxito; si fallas, pagas una multa. Espera 3 horas entre intentos.",
+            "`/top` Mira las 10 mayores fortunas de este servidor."
+        ].join("\n\n")
+    },
+    {
+        title: "🎮 Juegos y utilidades",
+        description: [
+            "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
+            "`/ppt [oponente]` Juega piedra, papel o tijera contra el bot o una persona.",
+            "`/8ball pregunta` Consulta una respuesta y su probabilidad.",
+            "`/ping` Comprueba la latencia del bot.",
+            "`/help` Abre esta guía."
         ].join("\n\n")
     },
     {
@@ -363,7 +745,7 @@ function createHelpEmbed(pageIndex) {
         .setColor(0x2f9e8f)
         .setTitle(page.title)
         .setDescription(page.description)
-        .setFooter({ text: `Página ${pageIndex + 1} de ${HELP_PAGES.length}` });
+        .setFooter({ text: `📖 Página ${pageIndex + 1} de ${HELP_PAGES.length}` });
 
 }
 
@@ -373,12 +755,12 @@ function createHelpButtons(pageIndex, interactionId, disabled = false) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`help-${interactionId}-previous`)
-                .setLabel("Anterior")
+                .setLabel("◀️ Anterior")
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || pageIndex === 0),
             new ButtonBuilder()
                 .setCustomId(`help-${interactionId}-next`)
-                .setLabel("Siguiente")
+                .setLabel("Siguiente ▶️")
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(disabled || pageIndex === HELP_PAGES.length - 1)
         )
@@ -805,6 +1187,8 @@ function findTicTacToeBotMove(board) {
 client.on("interactionCreate", async interaction => {
 
     if (!interaction.isChatInputCommand()) return;
+
+    if (await handleEconomyCommand(interaction)) return;
 
     if (interaction.commandName === "8ball") {
 
