@@ -1178,7 +1178,7 @@ client.on("messageCreate", async message => {
 
                     warningMessage.delete().catch(() => {});
 
-                }, 3000);
+                }, 5000);
 
             } catch (error) {}
 
