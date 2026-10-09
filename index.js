@@ -10,6 +10,7 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    ChannelType,
     GatewayIntentBits,
     PermissionsBitField,
     REST,
@@ -24,6 +25,7 @@ const {
 const TOKEN = process.env.DISCORD_TOKEN;
 const CHAT_CHANNEL_ID = "1530770440992194643";
 const COMMAND_LOG_CHANNEL_ID = "1557996473151651861";
+const COMMUNITY_CHANNEL_ID = "1558002369848016966";
 const FUNNY_ROLE_ID = "1531550671285784770";
 const TWITCH_STREAM_URL = "https://www.twitch.tv/soyja_20";
 const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
@@ -86,6 +88,7 @@ const MAX_DUPLICATE_MESSAGES = 3;
 
 const ECONOMY_FILE = path.join(__dirname, "economy.json");
 const ROLE_ASSIGNMENTS_FILE = path.join(__dirname, "role_assignments.json");
+const CONNECTED_CHANNELS_FILE = path.join(__dirname, "connected_channels.json");
 const STARTING_BALANCE = 1000;
 const MINIMUM_BET = 10;
 const WORK_COOLDOWN = 60 * 60 * 1000;
@@ -145,6 +148,35 @@ function getEconomyAccount(guildId, userId) {
     }
 
     return economyData[guildId][userId];
+}
+
+function loadConnectedChannels() {
+
+    if (!fs.existsSync(CONNECTED_CHANNELS_FILE)) return {};
+
+    const data = JSON.parse(fs.readFileSync(CONNECTED_CHANNELS_FILE, "utf8"));
+
+    if (
+        !data
+        || typeof data !== "object"
+        || Array.isArray(data)
+        || Object.entries(data).some(([guildId, channelId]) =>
+            !/^\d+$/.test(guildId) || typeof channelId !== "string" || !/^\d+$/.test(channelId)
+        )
+    ) {
+        throw new Error("El archivo de canales conectados no contiene datos válidos.");
+    }
+
+    return data;
+}
+
+let connectedChannels = loadConnectedChannels();
+
+function saveConnectedChannels() {
+
+    const temporaryFile = `${CONNECTED_CHANNELS_FILE}.tmp`;
+    fs.writeFileSync(temporaryFile, JSON.stringify(connectedChannels, null, 2), "utf8");
+    fs.renameSync(temporaryFile, CONNECTED_CHANNELS_FILE);
 }
 
 function loadRoleAssignments() {
@@ -781,6 +813,18 @@ const commands = [
                 .setDescription("Duración en minutos; omítelo para asignar el rol permanentemente.")
                 .setRequired(false)
                 .setMinValue(1)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("conectar")
+        .setDescription("Conecta un canal de este servidor al chat comunitario.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addChannelOption(option =>
+            option
+                .setName("canal")
+                .setDescription("Canal de texto que se conectará al chat comunitario.")
+                .setRequired(true)
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         )
 
 ].map(command => command.toJSON());
@@ -893,7 +937,8 @@ const HELP_PAGES = [
             "`/kick usuario [razon]` Expulsa a una persona. Requiere Expulsar miembros.",
             "`/ban usuario [razon]` Banea a una persona. Requiere Banear miembros.",
             "`/timeout usuario minutos [razon]` Aplica un timeout. Requiere Moderar miembros.",
-            "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores."
+            "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores.",
+            "`/conectar canal` Conecta un canal al chat comunitario. Solo administradores."
         ].join("\n\n")
     }
 ];
@@ -1058,6 +1103,7 @@ client.on("messageCreate", async message => {
 
         try {
 
+            await relayCommunityMessage(message);
             await message.channel.sendTyping();
             await new Promise(resolve => setTimeout(resolve, BOT_REPLY_DELAY));
             if (botReplyType === "gif") {
@@ -1250,8 +1296,11 @@ client.on("messageCreate", async message => {
         }
 
         duplicateData.count = 0;
+        return;
 
     }
+
+    await relayCommunityMessage(message);
 
 });
 
@@ -1399,6 +1448,141 @@ function formatCommandOption(option) {
     return `• ${option.name}: ${value ?? "—"}`;
 }
 
+async function handleConnectChannelCommand(interaction) {
+
+    if (interaction.commandName !== "conectar") return false;
+
+    if (!interaction.guild) {
+        await interaction.reply({
+            content: "❌ Este comando solo se puede usar en un servidor.",
+            ephemeral: true
+        });
+        return true;
+    }
+
+    if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+        await interaction.reply({
+            content: "❌ Solo los administradores pueden conectar un canal.",
+            ephemeral: true
+        });
+        return true;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const guild = interaction.guild;
+        const selectedChannel = interaction.options.getChannel("canal", true);
+
+        if (selectedChannel.guildId !== guild.id) {
+            return interaction.editReply("❌ El canal seleccionado debe pertenecer a este servidor.");
+        }
+
+        if (selectedChannel.id === COMMUNITY_CHANNEL_ID) {
+            return interaction.editReply("❌ Ese es el canal principal; elige un canal de este servidor.");
+        }
+
+        const [botMember, mainChannel] = await Promise.all([
+            guild.members.fetchMe(),
+            client.channels.fetch(COMMUNITY_CHANNEL_ID)
+        ]);
+
+        const localPermissions = selectedChannel.permissionsFor(botMember);
+        if (
+            !selectedChannel.isTextBased()
+            || !localPermissions?.has([
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages
+            ])
+        ) {
+            return interaction.editReply(
+                "❌ Necesito permisos para ver y enviar mensajes en el canal seleccionado."
+            );
+        }
+
+        if (
+            !mainChannel?.isTextBased()
+            || !("send" in mainChannel)
+        ) {
+            throw new Error("El canal principal no existe o no admite mensajes.");
+        }
+
+        const mainGuild = await client.guilds.fetch(mainChannel.guildId);
+        const mainBotMember = await mainGuild.members.fetchMe();
+        const mainPermissions = mainChannel.permissionsFor(mainBotMember);
+
+        if (
+            !mainPermissions?.has([
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages
+            ])
+        ) {
+            throw new Error("El bot no tiene permisos para ver y enviar mensajes en el canal principal.");
+        }
+
+        const previousChannelId = connectedChannels[guild.id];
+        connectedChannels[guild.id] = selectedChannel.id;
+
+        try {
+            saveConnectedChannels();
+        } catch (error) {
+            if (previousChannelId) {
+                connectedChannels[guild.id] = previousChannelId;
+            } else {
+                delete connectedChannels[guild.id];
+            }
+            throw error;
+        }
+
+        return interaction.editReply(
+            `✅ ${selectedChannel} quedó conectado al chat comunitario. Los mensajes de este canal se compartirán en el canal principal y los demás canales conectados.`
+        );
+    } catch (error) {
+        console.error("No pude conectar el canal al chat comunitario:", error);
+        return interaction.editReply(
+            "❌ No pude conectar ese canal. Revisa los permisos del bot y vuelve a intentarlo."
+        );
+    }
+
+}
+
+async function relayCommunityMessage(message) {
+
+    const isMainChannel = message.channel.id === COMMUNITY_CHANNEL_ID;
+    const connectedChannelId = connectedChannels[message.guild.id];
+
+    if (!isMainChannel && connectedChannelId !== message.channel.id) return;
+
+    const displayName = message.member?.displayName || message.author.username;
+    const attachments = [...message.attachments.values()].map(attachment => attachment.url);
+    const body = [message.content.trim(), ...attachments].filter(Boolean).join("\n");
+    const prefix = `**[${message.guild.name}] ${displayName}:**\n`;
+    const relayContent = `${prefix}${(body || "(mensaje sin texto)").slice(0, 1900 - prefix.length)}`;
+    const destinationIds = new Set(
+        Object.values(connectedChannels).filter(channelId => channelId !== message.channel.id)
+    );
+
+    if (!isMainChannel) destinationIds.add(COMMUNITY_CHANNEL_ID);
+
+    await Promise.all([...destinationIds].map(async channelId => {
+        try {
+            const destination = await client.channels.fetch(channelId);
+
+            if (!destination?.isTextBased() || !("send" in destination)) {
+                throw new Error(`El canal conectado ${channelId} no admite mensajes.`);
+            }
+
+            await destination.send({
+                content: relayContent,
+                allowedMentions: { parse: [] }
+            });
+        } catch (error) {
+            console.error(`No pude reenviar el mensaje al canal ${channelId}:`, error);
+        }
+    }));
+
+}
+
 async function logCommandUsage(interaction) {
 
     try {
@@ -1472,6 +1656,8 @@ client.on("interactionCreate", async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     void logCommandUsage(interaction);
+
+    if (await handleConnectChannelCommand(interaction)) return;
 
     if (await handleEconomyCommand(interaction)) return;
 
