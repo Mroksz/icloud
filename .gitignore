@@ -2,3 +2,5 @@ node_modules
 .env
 economy.json
 economy.json.tmp
+role_assignments.json
+role_assignments.json.tmp

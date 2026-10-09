@@ -84,6 +84,7 @@ const TIMEOUT_DURATION = 60 * 1000;
 const MAX_DUPLICATE_MESSAGES = 3;
 
 const ECONOMY_FILE = path.join(__dirname, "economy.json");
+const ROLE_ASSIGNMENTS_FILE = path.join(__dirname, "role_assignments.json");
 const STARTING_BALANCE = 1000;
 const MINIMUM_BET = 10;
 const WORK_COOLDOWN = 60 * 60 * 1000;
@@ -143,6 +144,103 @@ function getEconomyAccount(guildId, userId) {
     }
 
     return economyData[guildId][userId];
+}
+
+function loadRoleAssignments() {
+
+    if (!fs.existsSync(ROLE_ASSIGNMENTS_FILE)) return [];
+
+    const data = JSON.parse(fs.readFileSync(ROLE_ASSIGNMENTS_FILE, "utf8"));
+
+    if (
+        !Array.isArray(data)
+        || data.some(assignment =>
+            !assignment
+            || typeof assignment !== "object"
+            || typeof assignment.guildId !== "string"
+            || typeof assignment.userId !== "string"
+            || typeof assignment.roleId !== "string"
+            || !Number.isFinite(assignment.expiresAt)
+        )
+    ) {
+        throw new Error("El archivo de roles temporales no contiene datos válidos.");
+    }
+
+    return data;
+}
+
+function saveRoleAssignments() {
+
+    const temporaryFile = `${ROLE_ASSIGNMENTS_FILE}.tmp`;
+    fs.writeFileSync(temporaryFile, JSON.stringify(roleAssignments, null, 2), "utf8");
+    fs.renameSync(temporaryFile, ROLE_ASSIGNMENTS_FILE);
+}
+
+let roleAssignments = loadRoleAssignments();
+const roleExpirationTimers = new Map();
+
+function getRoleAssignmentKey(assignment) {
+
+    return `${assignment.guildId}:${assignment.userId}:${assignment.roleId}`;
+}
+
+function scheduleRoleExpiration(assignment) {
+
+    const key = getRoleAssignmentKey(assignment);
+    const previousTimer = roleExpirationTimers.get(key);
+
+    if (previousTimer) clearTimeout(previousTimer);
+
+    const remaining = assignment.expiresAt - Date.now();
+    const timer = setTimeout(async () => {
+
+        if (Date.now() < assignment.expiresAt) {
+            scheduleRoleExpiration(assignment);
+            return;
+        }
+
+        try {
+            const guild = await client.guilds.fetch(assignment.guildId);
+            const member = await guild.members.fetch(assignment.userId);
+            const role = await guild.roles.fetch(assignment.roleId);
+
+            if (role && member.roles.cache.has(role.id)) {
+                await member.roles.remove(role, "Terminó la duración del rol temporal");
+            }
+
+            roleAssignments = roleAssignments.filter(
+                savedAssignment => getRoleAssignmentKey(savedAssignment) !== key
+            );
+            saveRoleAssignments();
+            roleExpirationTimers.delete(key);
+        } catch (error) {
+            if ([10004, 10007, 10011].includes(error.code)) {
+                roleAssignments = roleAssignments.filter(
+                    savedAssignment => getRoleAssignmentKey(savedAssignment) !== key
+                );
+                saveRoleAssignments();
+                roleExpirationTimers.delete(key);
+                return;
+            }
+
+            console.error(`No pude retirar el rol temporal ${assignment.roleId}:`, error);
+            const retryTimer = setTimeout(
+                () => scheduleRoleExpiration(assignment),
+                60 * 1000
+            );
+            roleExpirationTimers.set(key, retryTimer);
+        }
+
+    }, Math.min(Math.max(remaining, 0), 2 ** 31 - 1));
+
+    roleExpirationTimers.set(key, timer);
+}
+
+function scheduleSavedRoleExpirations() {
+
+    for (const assignment of roleAssignments) {
+        scheduleRoleExpiration(assignment);
+    }
 }
 
 function formatPesos(amount) {
@@ -425,12 +523,21 @@ const BOT_MENTION_MESSAGES = [
     "Soy adorable, ¿a que sí?",
     "Soy interesante... aunque me menciones solo para comprobarlo."
 ];
+const WELCOME_EMOJIS = "<:emoji_5:1531191935354536018> <:emoji_17:1531194038676357140> <:sunglas:1531564951049732107>";
+const BOT_GIF_REPLY_EMOJIS = [
+    "<:emoji_30:1531561367834853416>",
+    "<:emoji_16:1531194004333396049>",
+    "<:emoji_28:1531561292672925707>",
+    "<:emoji_32:1531561562555285504>",
+    "<:dog_laughing_at_you:1531566496038518794>",
+    "<:agent:1531565321079488685>"
+];
 const WELCOME_MESSAGES = [
-    memberId => `¡Bienvenido, <@${memberId}>! El caos ya tiene refuerzos.`,
-    memberId => `¡Llegó <@${memberId}>! Ponte cómodo; el bot ya estaba hablando solo.`,
-    memberId => `¡Bienvenido a bordo, <@${memberId}>! La cordura es opcional y el caos viene incluido.`,
-    memberId => `¡Se sumó <@${memberId}>! Ahora somos oficialmente más que los errores del bot.`,
-    memberId => `¡Hola, <@${memberId}>! Si el bot te saluda primero, no significa que sepa lo que hace.`
+    memberId => `${WELCOME_EMOJIS} ¡Bienvenido, <@${memberId}>! El caos ya tiene refuerzos.`,
+    memberId => `${WELCOME_EMOJIS} ¡Llegó <@${memberId}>! Ponte cómodo; el bot ya estaba hablando solo.`,
+    memberId => `${WELCOME_EMOJIS} ¡Bienvenido a bordo, <@${memberId}>! La cordura es opcional y el caos viene incluido.`,
+    memberId => `${WELCOME_EMOJIS} ¡Se sumó <@${memberId}>! Ahora somos oficialmente más que los errores del bot.`,
+    memberId => `${WELCOME_EMOJIS} ¡Hola, <@${memberId}>! Si el bot te saluda primero, no significa que sepa lo que hace.`
 ];
 
 function pickRandomMessage(messages) {
@@ -649,6 +756,30 @@ const commands = [
                 .setName("razon")
                 .setDescription("Razón")
                 .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("darrol")
+        .setDescription("Asigna un rol a una persona, opcionalmente por tiempo.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addUserOption(option =>
+            option
+                .setName("usuario")
+                .setDescription("Persona que recibirá el rol.")
+                .setRequired(true)
+        )
+        .addRoleOption(option =>
+            option
+                .setName("rol")
+                .setDescription("Rol que se asignará.")
+                .setRequired(true)
+        )
+        .addIntegerOption(option =>
+            option
+                .setName("minutos")
+                .setDescription("Duración en minutos; omítelo para asignar el rol permanentemente.")
+                .setRequired(false)
+                .setMinValue(1)
         )
 
 ].map(command => command.toJSON());
@@ -760,7 +891,8 @@ const HELP_PAGES = [
             "`/clear cantidad` Elimina de 1 a 100 mensajes. Requiere Gestionar mensajes.",
             "`/kick usuario [razon]` Expulsa a una persona. Requiere Expulsar miembros.",
             "`/ban usuario [razon]` Banea a una persona. Requiere Banear miembros.",
-            "`/timeout usuario minutos [razon]` Aplica un timeout. Requiere Moderar miembros."
+            "`/timeout usuario minutos [razon]` Aplica un timeout. Requiere Moderar miembros.",
+            "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores."
         ].join("\n\n")
     }
 ];
@@ -844,6 +976,7 @@ client.once("ready", async () => {
     console.log("--------------------------------");
 
     updateBotPresence();
+    scheduleSavedRoleExpirations();
 
     scheduleFunnyMessage();
     await registerCommands();
@@ -928,8 +1061,15 @@ client.on("messageCreate", async message => {
             await new Promise(resolve => setTimeout(resolve, BOT_REPLY_DELAY));
             if (botReplyType === "gif") {
                 const gifUrl = pickRandomMessage(BOT_REPLY_GIF_URLS);
-                await message.channel.send(`${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${gifUrl}`);
+                const replyEmoji = pickRandomMessage(BOT_GIF_REPLY_EMOJIS);
+                await message.channel.send(`${replyEmoji} ${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${gifUrl}`);
             } else {
+                try {
+                    await message.react("1531564951049732107");
+                } catch (error) {
+                    console.error("No pude reaccionar a la mención del bot:", error);
+                }
+
                 await message.channel.send(pickRandomMessage(BOT_MENTION_MESSAGES));
             }
 
@@ -1843,6 +1983,112 @@ client.on("interactionCreate", async interaction => {
         await interaction.reply(
             `🔨 ${user} fue baneado.\n**Razón:** ${reason}`
         );
+
+    }
+
+    // =================================
+    // DAR ROL
+    // =================================
+
+    if (interaction.commandName === "darrol") {
+
+        if (!interaction.guild) {
+            return interaction.reply({
+                content: "❌ Este comando solo se puede usar en un servidor.",
+                ephemeral: true
+            });
+        }
+
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({
+                content: "❌ Solo los administradores pueden usar este comando.",
+                ephemeral: true
+            });
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        const guild = interaction.guild;
+        const user = interaction.options.getUser("usuario", true);
+        const role = interaction.options.getRole("rol", true);
+        const minutes = interaction.options.getInteger("minutos");
+
+        try {
+            await guild.members.fetchMe();
+            const [member, actor] = await Promise.all([
+                guild.members.fetch(user.id),
+                guild.members.fetch(interaction.user.id)
+            ]);
+
+            if (role.id === guild.id || role.managed || !role.editable) {
+                return interaction.editReply(
+                    "❌ No puedo asignar ese rol. Revisa que el bot tenga **Gestionar roles** y que el rol esté debajo de su rol más alto."
+                );
+            }
+
+            if (
+                actor.id !== guild.ownerId
+                && actor.roles.highest.comparePositionTo(role) <= 0
+            ) {
+                return interaction.editReply(
+                    "❌ Solo puedes asignar roles que estén debajo de tu rol más alto."
+                );
+            }
+
+            const key = getRoleAssignmentKey({
+                guildId: guild.id,
+                userId: user.id,
+                roleId: role.id
+            });
+            const previousAssignments = roleAssignments;
+            roleAssignments = roleAssignments.filter(
+                assignment => getRoleAssignmentKey(assignment) !== key
+            );
+
+            if (minutes !== null) {
+                roleAssignments.push({
+                    guildId: guild.id,
+                    userId: user.id,
+                    roleId: role.id,
+                    expiresAt: Date.now() + minutes * 60 * 1000
+                });
+            }
+
+            try {
+                saveRoleAssignments();
+                await member.roles.add(role, `Asignado por ${interaction.user.tag}`);
+            } catch (error) {
+                roleAssignments = previousAssignments;
+                try {
+                    saveRoleAssignments();
+                } catch (saveError) {
+                    console.error("No pude restaurar el registro del rol temporal:", saveError);
+                }
+                throw error;
+            }
+
+            const existingTimer = roleExpirationTimers.get(key);
+            if (existingTimer) clearTimeout(existingTimer);
+            roleExpirationTimers.delete(key);
+
+            if (minutes !== null) {
+                const assignment = roleAssignments.find(
+                    savedAssignment => getRoleAssignmentKey(savedAssignment) === key
+                );
+                scheduleRoleExpiration(assignment);
+            }
+
+            return interaction.editReply(
+                minutes === null
+                    ? `✅ Asigné permanentemente ${role} a ${user}.`
+                    : `✅ Asigné ${role} a ${user} durante **${minutes} minutos**.`
+            );
+        } catch (error) {
+            console.error("No pude asignar el rol solicitado:", error);
+            return interaction.editReply(
+                "❌ No pude asignar el rol. Verifica que la persona y el rol sigan en el servidor y que la jerarquía/permisos del bot sean correctos."
+            );
+        }
 
     }
 
