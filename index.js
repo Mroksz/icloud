@@ -109,6 +109,78 @@ const WORK_JOBS = [
     { name: "traductor de maullidos", minimum: 110, maximum: 300 },
     { name: "cazador de bugs", minimum: 200, maximum: 400 }
 ];
+const AKINATOR_MAX_QUESTIONS = 12;
+const AKINATOR_MIN_GUESSES = 6;
+const AKINATOR_CHARACTERS = [
+    { name: "Goku", wiki: "Goku", traits: ["anime", "male", "alien", "powers", "martial-arts", "animated"] },
+    { name: "Naruto Uzumaki", wiki: "Naruto Uzumaki", traits: ["anime", "male", "human", "powers", "ninja", "animated"] },
+    { name: "Monkey D. Luffy", wiki: "Monkey D. Luffy", traits: ["anime", "male", "human", "powers", "pirate", "animated"] },
+    { name: "Saitama", wiki: "Saitama (One-Punch Man)", traits: ["anime", "male", "human", "powers", "martial-arts", "animated"] },
+    { name: "Tanjiro Kamado", wiki: "Tanjiro Kamado", traits: ["anime", "male", "human", "sword", "animated"] },
+    { name: "Pikachu", wiki: "Pikachu", traits: ["game", "nintendo", "animal", "yellow", "powers", "animated"] },
+    { name: "Mario", wiki: "Mario", traits: ["game", "nintendo", "male", "human", "plumber", "animated"] },
+    { name: "Sonic", wiki: "Sonic the Hedgehog", traits: ["game", "animal", "blue", "powers", "animated"] },
+    { name: "Link", wiki: "Link (The Legend of Zelda)", traits: ["game", "nintendo", "male", "human", "sword", "animated"] },
+    { name: "Zelda", wiki: "Princess Zelda", traits: ["game", "nintendo", "female", "human", "powers", "sword", "animated"] },
+    { name: "Batman", wiki: "Batman", traits: ["comic", "hero", "male", "human", "mask", "weapon", "animated"] },
+    { name: "Superman", wiki: "Superman", traits: ["comic", "hero", "male", "alien", "powers", "animated"] },
+    { name: "Spider-Man", wiki: "Spider-Man", traits: ["comic", "hero", "male", "human", "mask", "powers", "animated"] },
+    { name: "Iron Man", wiki: "Iron Man", traits: ["comic", "hero", "male", "human", "mask", "weapon"] },
+    { name: "Darth Vader", wiki: "Darth Vader", traits: ["movie", "villain", "male", "human", "mask", "weapon", "space", "powers"] },
+    { name: "Harry Potter", wiki: "Harry Potter (character)", traits: ["movie", "male", "human", "wizard", "powers", "glasses"] },
+    { name: "Shrek", wiki: "Shrek", traits: ["movie", "male", "animal", "animated"] },
+    { name: "Elsa", wiki: "Elsa (Frozen)", traits: ["movie", "female", "human", "powers", "animated"] },
+    { name: "Bob Esponja", wiki: "SpongeBob SquarePants (character)", traits: ["tv", "male", "animal", "yellow", "underwater", "animated"] },
+    { name: "Homero Simpson", wiki: "Homer Simpson", traits: ["tv", "male", "human", "animated"] },
+    { name: "Rick Sanchez", wiki: "Rick Sanchez", traits: ["tv", "male", "human", "glasses", "space", "animated"] },
+    { name: "Freddy Fazbear", wiki: "Freddy Fazbear", traits: ["game", "animal", "villain", "mask", "horror"] },
+    { name: "Steve", wiki: "Steve (Minecraft)", traits: ["game", "male", "human", "weapon"] },
+    { name: "Kratos", wiki: "Kratos (God of War)", traits: ["game", "male", "human", "powers", "weapon", "sword"] },
+    { name: "Master Chief", wiki: "Master Chief (Halo)", traits: ["game", "male", "human", "mask", "weapon", "space"] },
+    { name: "Lara Croft", wiki: "Lara Croft", traits: ["game", "female", "human", "weapon"] },
+    { name: "Luigi", wiki: "Luigi", traits: ["game", "nintendo", "male", "human", "plumber", "animated"] },
+    { name: "Yoshi", wiki: "Yoshi", traits: ["game", "nintendo", "animal", "animated"] },
+    { name: "Calamardo", wiki: "Squidward Tentacles", traits: ["tv", "male", "animal", "underwater", "animated"] },
+    { name: "Deadpool", wiki: "Deadpool", traits: ["comic", "hero", "male", "human", "mask", "powers", "weapon"] },
+    { name: "Wonder Woman", wiki: "Wonder Woman", traits: ["comic", "hero", "female", "human", "powers", "weapon", "sword"] },
+    { name: "Joker", wiki: "Joker (character)", traits: ["comic", "villain", "male", "human"] },
+    { name: "Wednesday Addams", wiki: "Wednesday Addams", traits: ["tv", "female", "human", "powers"] },
+    { name: "Groot", wiki: "Groot", traits: ["comic", "hero", "male", "animal", "powers", "space"] },
+    { name: "Stitch", wiki: "Stitch (Lilo & Stitch)", traits: ["movie", "animal", "blue", "powers", "space", "animated"] },
+    { name: "Mewtwo", wiki: "Mewtwo", traits: ["game", "nintendo", "animal", "powers", "animated"] },
+    { name: "Capitán América", wiki: "Captain America", traits: ["comic", "hero", "male", "human", "weapon"] }
+];
+const AKINATOR_QUESTIONS = [
+    { trait: "anime", text: "¿Tu personaje viene del anime o manga?" },
+    { trait: "game", text: "¿Tu personaje aparece principalmente en videojuegos?" },
+    { trait: "nintendo", text: "¿Está relacionado con Nintendo?" },
+    { trait: "comic", text: "¿Tu personaje viene de un cómic?" },
+    { trait: "hero", text: "¿Es considerado un héroe o superhéroe?" },
+    { trait: "villain", text: "¿Es un villano?" },
+    { trait: "movie", text: "¿Aparece en una película?" },
+    { trait: "tv", text: "¿Aparece en una serie de televisión?" },
+    { trait: "male", text: "¿Es hombre?" },
+    { trait: "female", text: "¿Es mujer?" },
+    { trait: "human", text: "¿Es humano?" },
+    { trait: "animal", text: "¿Es un animal o criatura?" },
+    { trait: "alien", text: "¿Es extraterrestre?" },
+    { trait: "powers", text: "¿Tiene poderes o habilidades sobrenaturales?" },
+    { trait: "mask", text: "¿Suele llevar máscara o casco?" },
+    { trait: "weapon", text: "¿Usa armas?" },
+    { trait: "wizard", text: "¿Es mago o usa magia?" },
+    { trait: "sword", text: "¿Usa una espada?" },
+    { trait: "yellow", text: "¿Es de color amarillo?" },
+    { trait: "blue", text: "¿Es de color azul?" },
+    { trait: "space", text: "¿Sus historias ocurren en el espacio?" },
+    { trait: "underwater", text: "¿Vive bajo el agua?" },
+    { trait: "pirate", text: "¿Es pirata?" },
+    { trait: "ninja", text: "¿Es ninja?" },
+    { trait: "plumber", text: "¿Es plomero?" },
+    { trait: "glasses", text: "¿Usa gafas?" },
+    { trait: "horror", text: "¿Viene de un juego o historia de terror?" },
+    { trait: "animated", text: "¿Es un personaje animado?" },
+    { trait: "martial-arts", text: "¿Es experto en artes marciales?" }
+];
 
 function loadEconomyData() {
 
@@ -720,6 +792,10 @@ const commands = [
         ),
 
     new SlashCommandBuilder()
+        .setName("akinator")
+        .setDescription("Piensa en un personaje y deja que el bot intente adivinarlo."),
+
+    new SlashCommandBuilder()
         .setName("clear")
         .setDescription("Elimina mensajes.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
@@ -923,6 +999,7 @@ const HELP_PAGES = [
         title: "🎮 Juegos y utilidades",
         description: [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
+            "`/akinator` Piensa en un personaje y responde con los botones para que el bot lo adivine.",
             "`/ppt [oponente]` Juega piedra, papel o tijera contra el bot o una persona.",
             "`/8ball pregunta` Consulta una respuesta y su probabilidad.",
             "`/ping` Comprueba la latencia del bot.",
@@ -1308,6 +1385,140 @@ client.on("messageCreate", async message => {
 // SLASH COMMANDS
 // ===============================
 
+function rankAkinatorCharacters(answers) {
+
+    const ranked = AKINATOR_CHARACTERS.map(character => ({
+        character,
+        score: [...answers].reduce((score, [trait, answer]) =>
+            score + (character.traits.includes(trait) === answer ? 1 : 0), 0)
+    }));
+    const bestScore = Math.max(...ranked.map(candidate => candidate.score));
+
+    return ranked
+        .filter(candidate => candidate.score === bestScore)
+        .map(candidate => candidate.character);
+}
+
+function chooseAkinatorQuestion(candidates, askedQuestions) {
+
+    const availableQuestions = AKINATOR_QUESTIONS.filter(
+        question => !askedQuestions.has(question.trait)
+    );
+    let bestBalance = Infinity;
+    let bestQuestions = [];
+
+    for (const question of availableQuestions) {
+        const yesCount = candidates.filter(
+            character => character.traits.includes(question.trait)
+        ).length;
+
+        if (yesCount === 0 || yesCount === candidates.length) continue;
+
+        const balance = Math.abs(candidates.length - 2 * yesCount);
+
+        if (balance < bestBalance) {
+            bestBalance = balance;
+            bestQuestions = [question];
+        } else if (balance === bestBalance) {
+            bestQuestions.push(question);
+        }
+    }
+
+    return pickRandomMessage(bestQuestions);
+}
+
+function createAkinatorButtons(gameId, disabled = false) {
+
+    return [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`akinator-${gameId}-yes`)
+                .setLabel("Sí")
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(disabled),
+            new ButtonBuilder()
+                .setCustomId(`akinator-${gameId}-no`)
+                .setLabel("No")
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled),
+            new ButtonBuilder()
+                .setCustomId(`akinator-${gameId}-unknown`)
+                .setLabel("No sé")
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled)
+        )
+    ];
+}
+
+function createAkinatorQuestionEmbed(question, candidates, askedCount) {
+
+    return new EmbedBuilder()
+        .setColor(0x7d3c98)
+        .setTitle(`🔮 Akinator · Pregunta ${askedCount + 1}`)
+        .setDescription(question.text)
+        .addFields({
+            name: "Personajes posibles",
+            value: `${candidates.length}`,
+            inline: true
+        })
+        .setFooter({
+            text: `Banco de ${AKINATOR_CHARACTERS.length} personajes · Anime, videojuegos, cómics, películas y series`
+        });
+}
+
+async function fetchAkinatorCharacterImage(character) {
+
+    let lastError;
+
+    for (const language of ["es", "en"]) {
+        try {
+            const response = await fetch(
+                `https://${language}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(character.wiki)}`,
+                {
+                    headers: {
+                        Accept: "application/json",
+                        "User-Agent": "SoymrDiscordBot/1.0"
+                    },
+                    signal: AbortSignal.timeout(5000)
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(`Wikipedia respondió con HTTP ${response.status}.`);
+            }
+
+            const summary = await response.json();
+            const originalImage = summary.originalimage?.source;
+            const thumbnail = summary.thumbnail?.source;
+            const imageUrl = originalImage?.toLowerCase().endsWith(".svg")
+                ? thumbnail
+                : originalImage || thumbnail;
+
+            if (imageUrl) return imageUrl;
+
+            lastError = new Error(`No encontré una imagen para ${character.name} en Wikipedia (${language}).`);
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    console.error(`No pude obtener la imagen de ${character.name}:`, lastError);
+    return null;
+}
+
+function createAkinatorResultEmbed(character, questionCount, imageUrl) {
+
+    const embed = new EmbedBuilder()
+        .setColor(0x7d3c98)
+        .setTitle("🔮 ¡Lo adiviné!")
+        .setDescription(`Estabas pensando en **${character.name}**.`)
+        .setFooter({ text: `Lo adiviné en ${questionCount} preguntas.` });
+
+    if (imageUrl) embed.setImage(imageUrl);
+
+    return embed;
+}
+
 function createTicTacToeRows(board, gameId, disabled = false) {
 
     return Array.from({ length: 3 }, (_, rowIndex) => {
@@ -1660,6 +1871,139 @@ client.on("interactionCreate", async interaction => {
     if (await handleConnectChannelCommand(interaction)) return;
 
     if (await handleEconomyCommand(interaction)) return;
+
+    if (interaction.commandName === "akinator") {
+
+        const gameId = interaction.id;
+        const state = {
+            answers: new Map(),
+            askedQuestions: new Set(),
+            questionCount: 0
+        };
+        let candidates = rankAkinatorCharacters(state.answers);
+        let currentQuestion = chooseAkinatorQuestion(
+            AKINATOR_CHARACTERS,
+            state.askedQuestions
+        );
+
+        await interaction.reply({
+            embeds: [createAkinatorQuestionEmbed(
+                currentQuestion,
+                candidates,
+                state.questionCount
+            )],
+            components: createAkinatorButtons(gameId)
+        });
+
+        const gameMessage = await interaction.fetchReply();
+        const collector = gameMessage.createMessageComponentCollector({
+            time: 180000,
+            filter: buttonInteraction =>
+                buttonInteraction.customId.startsWith(`akinator-${gameId}-`)
+        });
+        let processingAnswer = false;
+
+        collector.on("collect", async buttonInteraction => {
+
+            if (buttonInteraction.user.id !== interaction.user.id) {
+                return buttonInteraction.reply({
+                    content: "Esta partida de Akinator pertenece a quien la inició.",
+                    ephemeral: true
+                });
+            }
+
+            if (processingAnswer) {
+                await buttonInteraction.deferUpdate();
+                return;
+            }
+
+            processingAnswer = true;
+
+            try {
+                await buttonInteraction.deferUpdate();
+                const answer = buttonInteraction.customId.split("-").at(-1);
+
+                state.askedQuestions.add(currentQuestion.trait);
+                state.questionCount++;
+
+                if (answer === "yes") {
+                    state.answers.set(currentQuestion.trait, true);
+                } else if (answer === "no") {
+                    state.answers.set(currentQuestion.trait, false);
+                }
+
+                candidates = rankAkinatorCharacters(state.answers);
+                const questionPool = state.questionCount < AKINATOR_MIN_GUESSES
+                    ? AKINATOR_CHARACTERS
+                    : candidates;
+                const nextQuestion = chooseAkinatorQuestion(
+                    questionPool,
+                    state.askedQuestions
+                );
+                const shouldGuess = state.questionCount >= AKINATOR_MAX_QUESTIONS
+                    || (candidates.length === 1 && state.questionCount >= AKINATOR_MIN_GUESSES)
+                    || !nextQuestion;
+
+                if (shouldGuess) {
+                    collector.stop("guessed");
+                    const character = pickRandomMessage(candidates);
+                    const imageUrl = await fetchAkinatorCharacterImage(character);
+                    await gameMessage.edit({
+                        embeds: [createAkinatorResultEmbed(
+                            character,
+                            state.questionCount,
+                            imageUrl
+                        )],
+                        components: createAkinatorButtons(gameId, true)
+                    });
+                    return;
+                }
+
+                currentQuestion = nextQuestion;
+                await gameMessage.edit({
+                    embeds: [createAkinatorQuestionEmbed(
+                        currentQuestion,
+                        candidates,
+                        state.questionCount
+                    )],
+                    components: createAkinatorButtons(gameId)
+                });
+            } catch (error) {
+                console.error("Falló una ronda de Akinator:", error);
+                collector.stop("error");
+                await gameMessage.edit({
+                    content: "❌ Ocurrió un error al continuar Akinator. Inténtalo de nuevo con `/akinator`.",
+                    embeds: [],
+                    components: createAkinatorButtons(gameId, true)
+                }).catch(editError => {
+                    console.error("No pude mostrar el error de Akinator:", editError);
+                });
+            } finally {
+                processingAnswer = false;
+            }
+
+        });
+
+        collector.on("end", (_, reason) => {
+
+            if (reason === "guessed" || reason === "error") return;
+
+            void gameMessage.edit({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor(0x7d3c98)
+                        .setTitle("🔮 Partida terminada")
+                        .setDescription("Se acabó el tiempo. Inicia otra partida con `/akinator`.")
+                ],
+                components: createAkinatorButtons(gameId, true)
+            }).catch(error => {
+                console.error("No pude cerrar la partida de Akinator:", error);
+            });
+
+        });
+
+        return;
+    }
 
     if (interaction.commandName === "8ball") {
 
