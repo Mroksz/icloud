@@ -1064,13 +1064,15 @@ client.on("messageCreate", async message => {
                 const replyEmoji = pickRandomMessage(BOT_GIF_REPLY_EMOJIS);
                 await message.channel.send(`${replyEmoji} ${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${gifUrl}`);
             } else {
-                try {
-                    await message.react("1531564951049732107");
-                } catch (error) {
-                    console.error("No pude reaccionar a la mención del bot:", error);
-                }
+                const botReply = await message.channel.send(
+                    pickRandomMessage(BOT_MENTION_MESSAGES)
+                );
 
-                await message.channel.send(pickRandomMessage(BOT_MENTION_MESSAGES));
+                try {
+                    await botReply.react("1531564951049732107");
+                } catch (error) {
+                    console.error("No pude reaccionar a mi respuesta:", error);
+                }
             }
 
         } catch (error) {
