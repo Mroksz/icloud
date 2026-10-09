@@ -394,7 +394,22 @@ const userCooldowns = new Map();
 const userWarnings = new Map();
 const userLastMessages = new Map();
 
-const HOMERO_GIF_URL = "https://klipy.com/gifs/homero-laburo";
+const BOT_REPLY_GIF_URLS = [
+    "https://tenor.com/view/andrew-r-personality-likes-about-self-cv-gif-15418064",
+    "https://klipy.com/gifs/clown-9",
+    "https://tenor.com/view/angry-chinese-man-with-gun-shoot-pew-pow-gun-chinese-man-anger-gif-18651737",
+    "https://klipy.com/gifs/santi-santiagogimenez",
+    "https://tenor.com/view/tralalero-tralala-tung-tung-tung-sahur-brainrot-gif-14723192941540813594",
+    "https://tenor.com/view/old-man-spray-paint-bug-eye-man-gif-21526624",
+    "https://klipy.com/gifs/brick-wall-talking-to-wall",
+    "https://cdn.discordapp.com/attachments/1436825169699012608/1490011781693964348/ezgif-395a166e2e34663d.gif?ex=6ac9b25b&is=6ac860db&hm=75611bfc33c53406629b36f1ab1ec71d54ea3d9508fae3820b387224561131b3&",
+    "https://tenor.com/view/brotherjona-floomf-ryan-garcia-talking-to-monkey-gif-3486165354949704924",
+    "https://cdn.discordapp.com/attachments/852263444802699325/1450029816203055177/q_harias.gif?ex=6ac94340&is=6ac7f1c0&hm=45f8425ab8709e2242d6da73ee48f499d24c224db21765db3ade4d020280c5f1&",
+    "https://tenor.com/view/patrick-star-chewing-spongebob-eating-unimpressed-gif-11619313",
+    "https://tenor.com/view/job-job-application-jobless-gif-2757097081210871087",
+    "https://klipy.com/gifs/ryan-garcia-gervonta-davis"
+];
+const BOT_REPLY_DELAY = 3 * 1000;
 const BOT_REPLY_MESSAGES = [
     "Soy adorable, pero igual malo >:D",
     "Me mencionaste; ya puedes proceder con tu solicitud y tus disculpas.",
@@ -873,7 +888,10 @@ client.on("messageCreate", async message => {
 
         try {
 
-            await message.channel.send(`${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${HOMERO_GIF_URL}`);
+            await message.channel.sendTyping();
+            await new Promise(resolve => setTimeout(resolve, BOT_REPLY_DELAY));
+            const gifUrl = pickRandomMessage(BOT_REPLY_GIF_URLS);
+            await message.channel.send(`${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${gifUrl}`);
 
         } catch (error) {
 
