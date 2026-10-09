@@ -89,6 +89,8 @@ const MAX_DUPLICATE_MESSAGES = 3;
 const ECONOMY_FILE = path.join(__dirname, "economy.json");
 const ROLE_ASSIGNMENTS_FILE = path.join(__dirname, "role_assignments.json");
 const CONNECTED_CHANNELS_FILE = path.join(__dirname, "connected_channels.json");
+const GUILD_SETTINGS_FILE = path.join(__dirname, "guild_settings.json");
+const CHAT_XP_COOLDOWN = 60 * 1000;
 const STARTING_BALANCE = 1000;
 const MINIMUM_BET = 10;
 const WORK_COOLDOWN = 60 * 60 * 1000;
@@ -108,6 +110,39 @@ const WORK_JOBS = [
     { name: "guardia del último tamal", minimum: 150, maximum: 320 },
     { name: "traductor de maullidos", minimum: 110, maximum: 300 },
     { name: "cazador de bugs", minimum: 200, maximum: 400 }
+];
+const ENTERTAINMENT_CHALLENGES = [
+    "Describe tu día como si fuera el tráiler de una película épica.",
+    "Inventa un nombre de superhéroe para la persona que escribió antes que tú.",
+    "Resume tu serie favorita usando solo cinco palabras.",
+    "Escribe una excusa absurda para llegar tarde a una reunión con extraterrestres.",
+    "Dale un título dramático a la última comida que tuviste.",
+    "Inventa un eslogan para vender una piedra con mucha confianza.",
+    "Describe al bot como si fuera un jefe final de videojuego.",
+    "Cuenta qué poder inútil elegirías y cómo lo usarías para ganar dinero.",
+    "Inventa una nueva regla ridícula para este servidor.",
+    "Escribe una profecía sobre quién mandará el próximo mensaje.",
+    "Crea un nombre de banda usando el clima de hoy y el último objeto que viste.",
+    "Explica por qué los calcetines desaparecidos están organizando una rebelión."
+];
+const ORACLE_OPENERS = [
+    "Las estrellas consultaron el chat y dicen:",
+    "Mi bola mágica hizo una pausa dramática y responde:",
+    "El consejo de las neuronas votó por:",
+    "Un cuervo con Wi-Fi me acaba de susurrar:",
+    "El destino revisó tu pregunta y contestó:"
+];
+const ORACLE_ANSWERS = [
+    "Sí, pero no olvides llevar un plan B y algo para picar.",
+    "Todo apunta a que sí... especialmente si dejas de preguntarle a un bot.",
+    "No por ahora. El universo está actualizando sus términos y condiciones.",
+    "Las señales son confusas: vuelve a preguntar después de una siesta.",
+    "Definitivamente sí. Una paloma estadística lo confirmó.",
+    "Mejor no. Hasta mi última neurona levantó una ceja.",
+    "Hay posibilidades, pero tendrás que dar el primer paso.",
+    "El destino dice que depende de cuánto café haya disponible.",
+    "Ni sí ni no: la respuesta está escondida detrás del próximo meme.",
+    "La respuesta es sí, con un 73% de confianza y 100% de dramatismo."
 ];
 const AKINATOR_MAX_QUESTIONS = 12;
 const AKINATOR_MIN_GUESSES = 6;
@@ -220,6 +255,169 @@ function getEconomyAccount(guildId, userId) {
     }
 
     return economyData[guildId][userId];
+}
+
+function loadGuildSettings() {
+
+    if (!fs.existsSync(GUILD_SETTINGS_FILE)) return {};
+
+    const data = JSON.parse(fs.readFileSync(GUILD_SETTINGS_FILE, "utf8"));
+
+    if (
+        !data
+        || typeof data !== "object"
+        || Array.isArray(data)
+        || Object.entries(data).some(([guildId, settings]) =>
+            !/^\d+$/.test(guildId)
+            || !settings
+            || typeof settings !== "object"
+            || typeof settings.gifRepliesEnabled !== "boolean"
+            || typeof settings.chatStatsEnabled !== "boolean"
+            || !settings.users
+            || typeof settings.users !== "object"
+            || Array.isArray(settings.users)
+            || Object.entries(settings.users).some(([userId, stats]) =>
+                !/^\d+$/.test(userId)
+                || !stats
+                || !Number.isSafeInteger(stats.messages)
+                || stats.messages < 0
+                || !Number.isSafeInteger(stats.xp)
+                || stats.xp < 0
+                || !Number.isFinite(stats.lastXpAt)
+            )
+        )
+    ) {
+        throw new Error("El archivo de configuración de servidores no contiene datos válidos.");
+    }
+
+    return data;
+}
+
+let guildSettings = loadGuildSettings();
+let guildSettingsSaveTimer = null;
+
+function persistGuildSettings() {
+
+    const temporaryFile = `${GUILD_SETTINGS_FILE}.tmp`;
+    fs.writeFileSync(temporaryFile, JSON.stringify(guildSettings, null, 2), "utf8");
+    fs.renameSync(temporaryFile, GUILD_SETTINGS_FILE);
+}
+
+function saveGuildSettings() {
+
+    if (guildSettingsSaveTimer) {
+        clearTimeout(guildSettingsSaveTimer);
+        guildSettingsSaveTimer = null;
+    }
+
+    persistGuildSettings();
+}
+
+function scheduleGuildSettingsSave() {
+
+    if (guildSettingsSaveTimer) return;
+
+    guildSettingsSaveTimer = setTimeout(() => {
+        guildSettingsSaveTimer = null;
+
+        try {
+            persistGuildSettings();
+        } catch (error) {
+            console.error("No pude guardar las estadísticas del chat:", error);
+        }
+    }, 5000);
+    guildSettingsSaveTimer.unref();
+}
+
+function getGuildSettings(guildId) {
+
+    if (!guildSettings[guildId]) {
+        guildSettings[guildId] = {
+            gifRepliesEnabled: true,
+            chatStatsEnabled: false,
+            users: {}
+        };
+    }
+
+    return guildSettings[guildId];
+}
+
+function recordChatMessage(message) {
+
+    const settings = getGuildSettings(message.guild.id);
+    if (!settings.chatStatsEnabled) return;
+
+    const stats = settings.users[message.author.id] || {
+        messages: 0,
+        xp: 0,
+        lastXpAt: 0
+    };
+    const previousLevel = getChatLevel(stats.xp);
+    stats.messages++;
+
+    const now = Date.now();
+    if (now - stats.lastXpAt >= CHAT_XP_COOLDOWN) {
+        stats.xp += Math.floor(Math.random() * 11) + 15;
+        stats.lastXpAt = now;
+    }
+
+    settings.users[message.author.id] = stats;
+
+    const newLevel = getChatLevel(stats.xp);
+    if (newLevel > previousLevel) {
+        void message.channel.send(
+            `🎉 ¡${message.author} subió al **nivel ${newLevel}** en este servidor!`
+        ).catch(error => {
+            console.error("No pude anunciar la subida de nivel:", error);
+        });
+    }
+
+    scheduleGuildSettingsSave();
+}
+
+function getChatLevel(xp) {
+
+    return Math.floor(Math.sqrt(xp / 100));
+}
+
+function getChatLevelProgress(xp) {
+
+    const level = getChatLevel(xp);
+    const currentLevelXp = level ** 2 * 100;
+    const nextLevelXp = (level + 1) ** 2 * 100;
+
+    return {
+        level,
+        current: xp - currentLevelXp,
+        required: nextLevelXp - currentLevelXp
+    };
+}
+
+function createChatLeaderboardEmbed(guild, rankingType) {
+
+    const settings = getGuildSettings(guild.id);
+    const entries = Object.entries(settings.users)
+        .sort(([, first], [, second]) => rankingType === "messages"
+            ? second.messages - first.messages || second.xp - first.xp
+            : second.xp - first.xp || second.messages - first.messages
+        )
+        .slice(0, 10);
+    const description = entries.length
+        ? entries.map(([userId, stats], index) => {
+            const level = getChatLevel(stats.xp);
+            const score = rankingType === "messages"
+                ? `**${stats.messages.toLocaleString("es-MX")}** mensajes · nivel ${level}`
+                : `nivel **${level}** · ${stats.xp.toLocaleString("es-MX")} XP`;
+
+            return `**${index + 1}.** <@${userId}> — ${score}`;
+        }).join("\n")
+        : "Aún no hay mensajes registrados en este servidor.";
+
+    return new EmbedBuilder()
+        .setColor(0x2f9e8f)
+        .setTitle(rankingType === "messages" ? `💬 Top de chat · ${guild.name}` : `🏆 Top de niveles · ${guild.name}`)
+        .setDescription(description)
+        .setFooter({ text: "Cada servidor tiene sus propias estadísticas." });
 }
 
 function loadConnectedChannels() {
@@ -796,6 +994,61 @@ const commands = [
         .setDescription("Piensa en un personaje y deja que el bot intente adivinarlo."),
 
     new SlashCommandBuilder()
+        .setName("gifrespuestas")
+        .setDescription("Activa o desactiva las respuestas del bot con GIF en este servidor.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addBooleanOption(option =>
+            option
+                .setName("activado")
+                .setDescription("Elige si el bot contestará con GIF.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("chatstats")
+        .setDescription("Activa o desactiva niveles y estadísticas del chat en este servidor.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addBooleanOption(option =>
+            option
+                .setName("activado")
+                .setDescription("Elige si quieres registrar mensajes y experiencia.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("nivel")
+        .setDescription("Consulta tu nivel de chat o el de otra persona.")
+        .addUserOption(option =>
+            option
+                .setName("usuario")
+                .setDescription("Persona cuyo nivel quieres consultar.")
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("topchat")
+        .setDescription("Muestra quién ha escrito más en este servidor."),
+
+    new SlashCommandBuilder()
+        .setName("topniveles")
+        .setDescription("Muestra el ranking de niveles de este servidor."),
+
+    new SlashCommandBuilder()
+        .setName("reto")
+        .setDescription("Recibe un reto creativo del bot y cámbialo con un botón."),
+
+    new SlashCommandBuilder()
+        .setName("oraculo")
+        .setDescription("Consulta al oráculo caótico de iCloud.")
+        .addStringOption(option =>
+            option
+                .setName("pregunta")
+                .setDescription("Pregunta de sí o no para el oráculo.")
+                .setRequired(true)
+                .setMaxLength(300)
+        ),
+
+    new SlashCommandBuilder()
         .setName("clear")
         .setDescription("Elimina mensajes.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
@@ -1002,6 +1255,11 @@ const HELP_PAGES = [
             "`/akinator` Piensa en un personaje y responde con los botones para que el bot lo adivine.",
             "`/ppt [oponente]` Juega piedra, papel o tijera contra el bot o una persona.",
             "`/8ball pregunta` Consulta una respuesta y su probabilidad.",
+            "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
+            "`/reto` Recibe un reto creativo y pide otro con el botón.",
+            "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
+            "`/topniveles` Mira el ranking de niveles de este servidor.",
+            "`/topchat` Mira quién ha escrito más en este servidor.",
             "`/ping` Comprueba la latencia del bot.",
             "`/help` Abre esta guía."
         ].join("\n\n")
@@ -1015,7 +1273,9 @@ const HELP_PAGES = [
             "`/ban usuario [razon]` Banea a una persona. Requiere Banear miembros.",
             "`/timeout usuario minutos [razon]` Aplica un timeout. Requiere Moderar miembros.",
             "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores.",
-            "`/conectar canal` Conecta un canal al chat comunitario. Solo administradores."
+            "`/conectar canal` Conecta un canal al chat comunitario. Solo administradores.",
+            "`/gifrespuestas activado` Enciende o apaga las respuestas con GIF. Solo administradores.",
+            "`/chatstats activado` Activa o desactiva niveles y estadísticas del chat. Solo administradores."
         ].join("\n\n")
     }
 ];
@@ -1134,6 +1394,37 @@ client.on("guildMemberRemove", updateBotPresence);
 client.on("guildCreate", updateBotPresence);
 client.on("guildDelete", updateBotPresence);
 
+client.on("guildCreate", async guild => {
+
+    try {
+        const botMember = await guild.members.fetchMe();
+        const candidateChannels = [
+            guild.systemChannel,
+            ...guild.channels.cache.filter(channel => channel.isTextBased()).values()
+        ].filter(Boolean);
+        const welcomeChannel = candidateChannels.find(channel =>
+            channel.isTextBased()
+            && channel.permissionsFor(botMember)?.has([
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages
+            ])
+        );
+
+        if (!welcomeChannel) {
+            console.warn(`No encontré un canal donde dar la bienvenida en ${guild.name}.`);
+            return;
+        }
+
+        await welcomeChannel.send({
+            content: `👋 ¡Hola, **${guild.name}**! Soy **iCloud**, el bot del servidor. Usa \`/help\` para descubrir lo que puedo hacer. ¡Gracias por invitarme!`,
+            allowedMentions: { parse: [] }
+        });
+    } catch (error) {
+        console.error(`No pude dar la bienvenida a ${guild.name}:`, error);
+    }
+
+});
+
 client.on("guildMemberAdd", async member => {
 
     if (member.user.bot || member.guild.name.trim().toLowerCase() !== "fuck") return;
@@ -1177,6 +1468,14 @@ client.on("messageCreate", async message => {
     const botReplyType = getBotReplyType(message);
 
     if (botReplyType) {
+        if (
+            botReplyType === "gif"
+            && !getGuildSettings(message.guild.id).gifRepliesEnabled
+        ) {
+            recordChatMessage(message);
+            await relayCommunityMessage(message);
+            return;
+        }
 
         try {
 
@@ -1205,6 +1504,7 @@ client.on("messageCreate", async message => {
 
         }
 
+        recordChatMessage(message);
         return;
     }
 
@@ -1377,6 +1677,7 @@ client.on("messageCreate", async message => {
 
     }
 
+    recordChatMessage(message);
     await relayCommunityMessage(message);
 
 });
@@ -1871,6 +2172,215 @@ client.on("interactionCreate", async interaction => {
     if (await handleConnectChannelCommand(interaction)) return;
 
     if (await handleEconomyCommand(interaction)) return;
+
+    if (interaction.commandName === "gifrespuestas" || interaction.commandName === "chatstats") {
+
+        if (!interaction.guild) {
+            return interaction.reply({
+                content: "❌ Este comando solo se puede usar dentro de un servidor.",
+                ephemeral: true
+            });
+        }
+
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({
+                content: "❌ Solo los administradores pueden cambiar esta configuración.",
+                ephemeral: true
+            });
+        }
+
+        const settings = getGuildSettings(interaction.guild.id);
+        const enabled = interaction.options.getBoolean("activado", true);
+        const settingName = interaction.commandName === "gifrespuestas"
+            ? "gifRepliesEnabled"
+            : "chatStatsEnabled";
+        const previousValue = settings[settingName];
+        settings[settingName] = enabled;
+
+        try {
+            saveGuildSettings();
+        } catch (error) {
+            settings[settingName] = previousValue;
+            console.error("No pude guardar la configuración del servidor:", error);
+            return interaction.reply({
+                content: "❌ No pude guardar el cambio. Inténtalo de nuevo.",
+                ephemeral: true
+            });
+        }
+
+        const confirmation = interaction.commandName === "gifrespuestas"
+            ? enabled
+                ? "✅ Activé las respuestas con GIF en este servidor."
+                : "✅ Desactivé las respuestas con GIF en este servidor. Las respuestas de texto al mencionarme siguen activas."
+            : enabled
+                ? "✅ Activé niveles y estadísticas del chat para este servidor."
+                : "✅ Desactivé el registro de chat en este servidor. Las estadísticas anteriores se conservarán.";
+
+        return interaction.reply({ content: confirmation, ephemeral: true });
+    }
+
+    if (interaction.commandName === "nivel") {
+
+        if (!interaction.guild) {
+            return interaction.reply({
+                content: "❌ Los niveles solo están disponibles en servidores.",
+                ephemeral: true
+            });
+        }
+
+        if (!getGuildSettings(interaction.guild.id).chatStatsEnabled) {
+            return interaction.reply({
+                content: "📊 Los niveles están desactivados en este servidor. Un administrador puede activarlos con `/chatstats activado:true`.",
+                ephemeral: true
+            });
+        }
+
+        const target = interaction.options.getUser("usuario") || interaction.user;
+        const stats = getGuildSettings(interaction.guild.id).users[target.id]
+            || { messages: 0, xp: 0, lastXpAt: 0 };
+        const progress = getChatLevelProgress(stats.xp);
+        const filledBlocks = Math.floor((progress.current / progress.required) * 10);
+        const progressBar = `${"🟩".repeat(filledBlocks)}${"⬛".repeat(10 - filledBlocks)}`;
+        const embed = new EmbedBuilder()
+            .setColor(0x2f9e8f)
+            .setTitle(`✨ Nivel de ${target.username}`)
+            .setThumbnail(target.displayAvatarURL({ size: 256 }))
+            .setDescription(
+                `**Nivel ${progress.level}**\n${progressBar}\n` +
+                `**${progress.current} / ${progress.required} XP** para el siguiente nivel`
+            )
+            .addFields(
+                { name: "Experiencia total", value: `${stats.xp.toLocaleString("es-MX")} XP`, inline: true },
+                { name: "Mensajes", value: stats.messages.toLocaleString("es-MX"), inline: true }
+            );
+
+        return interaction.reply({ embeds: [embed], allowedMentions: { parse: [] } });
+    }
+
+    if (interaction.commandName === "topchat" || interaction.commandName === "topniveles") {
+
+        if (!interaction.guild) {
+            return interaction.reply({
+                content: "❌ Los rankings están disponibles dentro de un servidor.",
+                ephemeral: true
+            });
+        }
+
+        if (!getGuildSettings(interaction.guild.id).chatStatsEnabled) {
+            return interaction.reply({
+                content: "📊 Las estadísticas están desactivadas en este servidor. Un administrador puede activarlas con `/chatstats activado:true`.",
+                ephemeral: true
+            });
+        }
+
+        return interaction.reply({
+            embeds: [createChatLeaderboardEmbed(
+                interaction.guild,
+                interaction.commandName === "topchat" ? "messages" : "levels"
+            )],
+            allowedMentions: { parse: [] }
+        });
+    }
+
+    if (interaction.commandName === "reto") {
+
+        const gameId = interaction.id;
+        let challenge = pickRandomMessage(ENTERTAINMENT_CHALLENGES);
+        const createChallengeEmbed = () => new EmbedBuilder()
+            .setColor(0xf39c12)
+            .setTitle("🎭 Reto creativo de iCloud")
+            .setDescription(challenge)
+            .setFooter({ text: "Solo por diversión; usa «Otro reto» si quieres cambiarlo." });
+        const createChallengeButtons = disabled => [
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`reto-${gameId}-otro`)
+                    .setLabel("🎲 Otro reto")
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId(`reto-${gameId}-listo`)
+                    .setLabel("¡Hecho!")
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(disabled)
+            )
+        ];
+
+        await interaction.reply({
+            embeds: [createChallengeEmbed()],
+            components: createChallengeButtons(false)
+        });
+
+        const challengeMessage = await interaction.fetchReply();
+        const collector = challengeMessage.createMessageComponentCollector({
+            time: 90000,
+            filter: buttonInteraction =>
+                buttonInteraction.customId.startsWith(`reto-${gameId}-`)
+        });
+
+        collector.on("collect", async buttonInteraction => {
+
+            if (buttonInteraction.user.id !== interaction.user.id) {
+                return buttonInteraction.reply({
+                    content: "Este reto pertenece a quien lo inició.",
+                    ephemeral: true
+                });
+            }
+
+            if (buttonInteraction.customId.endsWith("-listo")) {
+                collector.stop("completed");
+                return buttonInteraction.update({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor(0x2ecc71)
+                            .setTitle("🏅 ¡Reto completado!")
+                            .setDescription(`**${challenge}**\n\n¡Bien jugado!`)
+                    ],
+                    components: createChallengeButtons(true)
+                });
+            }
+
+            const previousChallenge = challenge;
+            while (challenge === previousChallenge && ENTERTAINMENT_CHALLENGES.length > 1) {
+                challenge = pickRandomMessage(ENTERTAINMENT_CHALLENGES);
+            }
+
+            await buttonInteraction.update({
+                embeds: [createChallengeEmbed()],
+                components: createChallengeButtons(false)
+            });
+
+        });
+
+        collector.on("end", (_, reason) => {
+
+            if (reason === "completed") return;
+
+            void challengeMessage.edit({
+                components: createChallengeButtons(true)
+            }).catch(error => {
+                console.error("No pude cerrar el reto creativo:", error);
+            });
+
+        });
+
+        return;
+    }
+
+    if (interaction.commandName === "oraculo") {
+
+        const question = interaction.options.getString("pregunta", true);
+        const embed = new EmbedBuilder()
+            .setColor(0x8e44ad)
+            .setTitle("🔮 El oráculo caótico de iCloud")
+            .setDescription(`**Tu pregunta:** ${question}\n\n${pickRandomMessage(ORACLE_OPENERS)}\n**${pickRandomMessage(ORACLE_ANSWERS)}**`)
+            .setFooter({ text: "La profecía es solo por diversión; tú decides tu destino." });
+
+        return interaction.reply({
+            embeds: [embed],
+            allowedMentions: { parse: [] }
+        });
+    }
 
     if (interaction.commandName === "akinator") {
 
