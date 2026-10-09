@@ -23,6 +23,7 @@ const {
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CHAT_CHANNEL_ID = "1530770440992194643";
+const COMMAND_LOG_CHANNEL_ID = "1557996473151651861";
 const FUNNY_ROLE_ID = "1531550671285784770";
 const TWITCH_STREAM_URL = "https://www.twitch.tv/soyja_20";
 const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
@@ -1384,9 +1385,93 @@ function findTicTacToeBotMove(board) {
 
 }
 
+function formatCommandOption(option) {
+
+    if (option.options?.length) {
+        return option.options.map(formatCommandOption).join("\n");
+    }
+
+    const value = option.user?.tag
+        || option.role?.name
+        || option.channel?.name
+        || option.value;
+
+    return `• ${option.name}: ${value ?? "—"}`;
+}
+
+async function logCommandUsage(interaction) {
+
+    try {
+        const channel = await client.channels.fetch(COMMAND_LOG_CHANNEL_ID);
+
+        if (!channel?.isTextBased() || !("send" in channel)) {
+            throw new Error("El canal configurado para logs no admite mensajes.");
+        }
+
+        const guild = interaction.guild;
+        const commandPath = `/${interaction.commandName}`;
+        const options = interaction.options.data
+            .map(formatCommandOption)
+            .join("\n")
+            .slice(0, 1024);
+        const embed = new EmbedBuilder()
+            .setColor(0x2f9e8f)
+            .setTitle(`Uso de comando: ${commandPath}`)
+            .setDescription(options || "Sin opciones.")
+            .addFields(
+                {
+                    name: "Usuario",
+                    value: `${interaction.user.tag} (<@${interaction.user.id}>)`,
+                    inline: true
+                },
+                {
+                    name: "Servidor",
+                    value: guild?.name || "Mensaje directo",
+                    inline: true
+                },
+                {
+                    name: "Fecha y hora",
+                    value: interaction.createdAt.toLocaleString("es-MX", {
+                        dateStyle: "medium",
+                        timeStyle: "medium",
+                        timeZone: "America/Mexico_City"
+                    }),
+                    inline: false
+                }
+            )
+            .setTimestamp(interaction.createdAt);
+        const guildIcon = guild?.iconURL({ size: 256 });
+
+        if (guildIcon) embed.setThumbnail(guildIcon);
+
+        const components = interaction.channelId
+            ? [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel("Ir al canal donde se usó")
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(
+                            `https://discord.com/channels/${guild?.id || "@me"}/${interaction.channelId}`
+                        )
+                )
+            ]
+            : [];
+
+        await channel.send({
+            embeds: [embed],
+            components,
+            allowedMentions: { parse: [] }
+        });
+    } catch (error) {
+        console.error("No pude registrar el uso del comando:", error);
+    }
+}
+
 client.on("interactionCreate", async interaction => {
 
     if (!interaction.isChatInputCommand()) return;
+
+    void logCommandUsage(interaction);
 
     if (await handleEconomyCommand(interaction)) return;
 
