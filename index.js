@@ -24,6 +24,7 @@ const {
 const TOKEN = process.env.DISCORD_TOKEN;
 const CHAT_CHANNEL_ID = "1530770440992194643";
 const FUNNY_ROLE_ID = "1531550671285784770";
+const TWITCH_STREAM_URL = "https://www.twitch.tv/soyja_20";
 const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
 const MAX_FUNNY_MESSAGE_DELAY = 5 * 60 * 60 * 1000;
 const FUNNY_MESSAGES = [
@@ -420,6 +421,10 @@ const BOT_REPLY_MESSAGES = [
     "Claro que sí. Aunque mi última neurona está en una reunión.",
     "Soy un bot de alto rendimiento... en teoría."
 ];
+const BOT_MENTION_MESSAGES = [
+    "Soy adorable, ¿a que sí?",
+    "Soy interesante... aunque me menciones solo para comprobarlo."
+];
 const WELCOME_MESSAGES = [
     memberId => `¡Bienvenido, <@${memberId}>! El caos ya tiene refuerzos.`,
     memberId => `¡Llegó <@${memberId}>! Ponte cómodo; el bot ya estaba hablando solo.`,
@@ -433,20 +438,28 @@ function pickRandomMessage(messages) {
     return messages[Math.floor(Math.random() * messages.length)];
 }
 
-function isMessageAgainstBot(message) {
-
+function getBotReplyType(message) {
     const content = message.content
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase();
+
+    const shouldSendGif = [
+        /\bcalla\b/,
+        /\bduerman\s+al\s+bot\b/,
+        /\btienes\s+down\b/,
+        /\bbajen\s+el\s+sueldo\b/,
+        /\bque\s+te\s+apaguen\b/
+    ].some(pattern => pattern.test(content));
+
+    if (shouldSendGif) return "gif";
+
     const mentionsBot = message.mentions.has(message.client.user)
         || message.mentions.users.has(message.client.user.id)
         || message.mentions.repliedUser?.id === message.client.user.id
         || new RegExp(`\\b(bot|robot)\\b|<@!?${message.client.user.id}>`).test(content);
-    const saysSleep = /\b(duermalo|duermelo|dormilo|dormirlo)\b/.test(content);
-    const saysLowerSalary = /\b(baj\w*|reduc\w*|recort\w*)\b.{0,40}\b(sueldo|salario|paga)\b|\b(sueldo|salario|paga)\b.{0,40}\b(baj\w*|reduc\w*|recort\w*)\b/.test(content);
 
-    return mentionsBot || saysSleep || saysLowerSalary;
+    return mentionsBot ? "mention" : null;
 }
 
 // ===============================
@@ -830,19 +843,40 @@ client.once("ready", async () => {
     console.log(`Servidores: ${client.guilds.cache.size}`);
     console.log("--------------------------------");
 
-    client.user.setPresence({
-        activities: [{
-            name: "estoy en decadencia",
-            state: "estoy en decadencia",
-            type: ActivityType.Custom
-        }],
-        status: "dnd"
-    });
+    updateBotPresence();
 
     scheduleFunnyMessage();
     await registerCommands();
 
 });
+
+function updateBotPresence() {
+    const totalUsers = client.guilds.cache.reduce(
+        (total, guild) => total + guild.memberCount,
+        0
+    );
+
+    client.user.setPresence({
+        activities: [
+            {
+                name: "Soyja_20 en directo",
+                type: ActivityType.Streaming,
+                url: TWITCH_STREAM_URL
+            },
+            {
+                name: "Custom Status",
+                state: `${totalUsers.toLocaleString("es-MX")} usuarios en total`,
+                type: ActivityType.Custom
+            }
+        ],
+        status: "online"
+    });
+}
+
+client.on("guildMemberAdd", updateBotPresence);
+client.on("guildMemberRemove", updateBotPresence);
+client.on("guildCreate", updateBotPresence);
+client.on("guildDelete", updateBotPresence);
 
 client.on("guildMemberAdd", async member => {
 
@@ -884,14 +918,20 @@ client.on("messageCreate", async message => {
     // Ignorar mensajes privados
     if (!message.guild) return;
 
-    if (isMessageAgainstBot(message)) {
+    const botReplyType = getBotReplyType(message);
+
+    if (botReplyType) {
 
         try {
 
             await message.channel.sendTyping();
             await new Promise(resolve => setTimeout(resolve, BOT_REPLY_DELAY));
-            const gifUrl = pickRandomMessage(BOT_REPLY_GIF_URLS);
-            await message.channel.send(`${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${gifUrl}`);
+            if (botReplyType === "gif") {
+                const gifUrl = pickRandomMessage(BOT_REPLY_GIF_URLS);
+                await message.channel.send(`${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${gifUrl}`);
+            } else {
+                await message.channel.send(pickRandomMessage(BOT_MENTION_MESSAGES));
+            }
 
         } catch (error) {
 
