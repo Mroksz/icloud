@@ -37,6 +37,7 @@ const CHAT_CHANNEL_ID = "1530770440992194643";
 const COMMAND_LOG_CHANNEL_ID = "1557996473151651861";
 const COMMUNITY_CHANNEL_ID = "1558002369848016966";
 const BOT_PRESENTATION_CHANNEL_ID = "1558385288877842453";
+const SUGGESTIONS_CHANNEL_ID = "1558400450301005924";
 const BOT_INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1554656981502005268&permissions=8&integration_type=0&scope=bot";
 const BOT_PRESENTATION_IMAGE_URL = "https://cdn.discordapp.com/attachments/1531765941665398835/1558394743619059792/dd78b88c8f36d58fccde936067e339ee_1.PNG?ex=6acb47b4&is=6ac9f634&hm=c49d272e7b9d6d6d453be996bfcc07ccb8a5338d2598c7aef2a218b7011b02ff";
 const FUNNY_ROLE_ID = "1531550671285784770";
@@ -1411,6 +1412,18 @@ let commands = [
         .setDescription("Muestra los comandos del bot organizados por categorías."),
 
     new SlashCommandBuilder()
+        .setName("sugerencia")
+        .setDescription("Envía una sugerencia para mejorar iCloud.")
+        .addStringOption(option =>
+            option
+                .setName("idea")
+                .setDescription("Cuéntanos qué te gustaría mejorar o agregar.")
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(1500)
+        ),
+
+    new SlashCommandBuilder()
         .setName("gato")
         .setDescription("Juega tres en raya contra el bot o contra otra persona.")
         .addUserOption(option =>
@@ -1710,6 +1723,18 @@ function scheduleFunnyMessage() {
 
 const HELP_PAGES = [
     {
+        title: "✨ Bienvenido a iCloud",
+        description: [
+            "Soy **iCloud**, tu compañero para juegos, entretenimiento y comunidad en Discord. Usa los botones de abajo para elegir qué quieres hacer:",
+            "💰 **Economía** · gana y administra tus pesos.",
+            "🎮 **Juegos** · juega, resuelve misterios y prueba retos.",
+            "🛡️ **Moderación** · herramientas para el equipo del servidor.",
+            "🌐 **Comunidad** · crea alianzas entre servidores y envía sugerencias.",
+            "¡Elige una categoría para descubrir sus comandos!"
+        ].join("\n\n"),
+        image: BOT_PRESENTATION_IMAGE_URL
+    },
+    {
         title: "💰 Economía · Pesos mexicanos",
         description: [
             "`/saldo [usuario]` Consulta tu cartera. Las cuentas nuevas empiezan con $1,000 MXN.",
@@ -1731,6 +1756,7 @@ const HELP_PAGES = [
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
             "`/topniveles` Mira el ranking de niveles de este servidor.",
             "`/topchat` Mira quién ha escrito más en este servidor.",
+            "`/sugerencia idea` Envía tu idea para mejorar iCloud.",
             "`/ping` Comprueba la latencia del bot.",
             "`/help` Abre esta guía."
         ].join("\n\n")
@@ -1749,6 +1775,7 @@ const HELP_PAGES = [
         title: "🌐 Comunidad y configuración",
         description: [
             "`/conectar canal` Enlaza el canal elegido con los demás canales conectados de otros servidores. Un administrador de cada servidor debe configurarlo; los mensajes se comparten entre todos.",
+            "`/sugerencia idea` Envía una idea al equipo de iCloud para que la revise.",
             "`/gifrespuestas activado` Enciende o apaga las respuestas con GIF. Solo administradores.",
             "`/chatstats activado` Activa o desactiva niveles y estadísticas del chat. Solo administradores.",
             "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores."
@@ -1760,7 +1787,7 @@ function createHelpEmbed(pageIndex) {
 
     const page = HELP_PAGES[pageIndex];
 
-    return new EmbedBuilder()
+    const embed = new EmbedBuilder()
         .setColor(0x7656d6)
         .setAuthor({
             name: "iCloud · Centro de ayuda",
@@ -1769,6 +1796,12 @@ function createHelpEmbed(pageIndex) {
         .setTitle(page.title)
         .setDescription(`${page.description}\n\nSelecciona una categoría con los botones para explorar los comandos.`)
         .setFooter({ text: `Categoría ${pageIndex + 1} de ${HELP_PAGES.length} · Usa /help cuando quieras volver a esta guía` });
+
+    if (page.image) {
+        embed.setImage(page.image);
+    }
+
+    return embed;
 
 }
 
@@ -1842,23 +1875,18 @@ function createGuildWelcomeEmbed(guild) {
         .setTitle("✨ ¡Gracias por invitar a iCloud! ✨")
         .setDescription(
             `¡Hola, **${guild.name}**! Estoy listo para traer juegos y diversión a esta comunidad.\n\n` +
-            "Empieza con uno de estos comandos y usa **/help** para ver la lista completa.\n\n" +
-            "🌐 **¿Quieren hacer alianza con otros servidores?** Un administrador puede usar `/conectar canal` para enlazar un canal y compartir mensajes con los demás servidores conectados."
+            "Usa **/help** para ver mi presentación y elige con los botones la categoría de comandos que quieras explorar."
         )
-        .addFields({
-            name: "🎮 Comandos para empezar",
-            value: [
-                "```",
-                "COMANDO       │ ¿QUÉ HACE?",
-                "──────────────┼────────────────────────",
-                "/akinator     │ Adivina lo que imaginas",
-                "/misterio     │ Resuelve un caso con pistas",
-                "/gato         │ Juega tres en raya",
-                "/reto         │ Prueba un reto creativo",
-                "/help         │ Lista completa de comandos",
-                "```"
-            ].join("\n")
-        })
+        .addFields(
+            {
+                name: "🌐 Alianzas entre servidores",
+                value: "Un administrador puede usar `/conectar canal` para enlazar un canal y compartir mensajes con los demás servidores conectados."
+            },
+            {
+                name: "💡 Envía tus ideas",
+                value: "Usa `/sugerencia idea` para mandar una sugerencia directamente al equipo de iCloud."
+            }
+        )
         .setImage(BOT_PRESENTATION_IMAGE_URL)
         .setFooter({ text: "iCloud · Diversión para toda la comunidad" });
 }
@@ -2626,10 +2654,12 @@ async function logCommandUsage(interaction) {
 
         const guild = interaction.guild;
         const commandPath = `/${interaction.commandName}`;
-        const options = interaction.options.data
-            .map(formatCommandOption)
-            .join("\n")
-            .slice(0, 1024);
+        const options = interaction.commandName === "sugerencia"
+            ? "Se envió una sugerencia al canal de revisión."
+            : interaction.options.data
+                .map(formatCommandOption)
+                .join("\n")
+                .slice(0, 1024);
         const embed = new EmbedBuilder()
             .setColor(0x2f9e8f)
             .setTitle(`Uso de comando: ${commandPath}`)
@@ -2683,11 +2713,210 @@ async function logCommandUsage(interaction) {
     }
 }
 
+const suggestionDecisionLocks = new Set();
+
+function createSuggestionDecisionButtons(userId, disabled = false) {
+
+    return [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`suggestion:take:${userId}`)
+                .setLabel("✅ Tomar en cuenta")
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(disabled),
+            new ButtonBuilder()
+                .setCustomId(`suggestion:decline:${userId}`)
+                .setLabel("❌ No tomar")
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled)
+        )
+    ];
+
+}
+
+async function handleSuggestionCommand(interaction) {
+
+    if (!interaction.guild) {
+        return interaction.reply({
+            content: "❌ Envía sugerencias desde un servidor para que podamos incluir su nombre y su imagen.",
+            ephemeral: true
+        });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const channel = await client.channels.fetch(SUGGESTIONS_CHANNEL_ID);
+        if (!channel?.isTextBased() || typeof channel.send !== "function") {
+            throw new Error("El canal configurado para sugerencias no admite mensajes.");
+        }
+
+        const submittedAt = new Date();
+        const suggestion = interaction.options.getString("idea", true).trim();
+        if (!suggestion) {
+            return interaction.editReply("Escribe una sugerencia antes de enviarla.");
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x7656d6)
+            .setAuthor({
+                name: interaction.user.globalName || interaction.user.username,
+                iconURL: interaction.user.displayAvatarURL()
+            })
+            .setTitle("💡 Nueva sugerencia")
+            .setDescription(suggestion)
+            .addFields(
+                {
+                    name: "Persona",
+                    value: `${interaction.user.username} (<@${interaction.user.id}>)`,
+                    inline: true
+                },
+                {
+                    name: "Servidor",
+                    value: interaction.guild.name,
+                    inline: true
+                },
+                {
+                    name: "Fecha y hora",
+                    value: submittedAt.toLocaleString("es-MX", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                        timeZone: "America/Mexico_City"
+                    }),
+                    inline: true
+                }
+            )
+            .setFooter({ text: "Estado: Pendiente" })
+            .setTimestamp(submittedAt);
+        const guildIcon = interaction.guild.iconURL({ size: 256 });
+
+        if (guildIcon) {
+            embed.setThumbnail(guildIcon);
+        }
+
+        await channel.send({
+            embeds: [embed],
+            components: createSuggestionDecisionButtons(interaction.user.id),
+            allowedMentions: { parse: [] }
+        });
+
+        return interaction.editReply("✅ ¡Gracias! Tu sugerencia fue enviada al equipo de iCloud para revisión.");
+    } catch (error) {
+        console.error("No pude enviar la sugerencia:", error);
+        return interaction.editReply(
+            "❌ No pude enviar tu sugerencia ahora. Inténtalo de nuevo más tarde."
+        );
+    }
+
+}
+
+async function handleSuggestionDecision(interaction) {
+
+    const match = interaction.customId.match(/^suggestion:(take|decline):(\d{17,20})$/);
+    if (!match) return;
+
+    if (interaction.channelId !== SUGGESTIONS_CHANNEL_ID) {
+        return interaction.reply({
+            content: "❌ Esta acción solo se puede usar en el canal de sugerencias.",
+            ephemeral: true
+        });
+    }
+
+    if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({
+            content: "❌ Solo los administradores pueden revisar sugerencias.",
+            ephemeral: true
+        });
+    }
+
+    const [, decision, userId] = match;
+    const messageId = interaction.message.id;
+    const currentFooter = interaction.message.embeds[0]?.footer?.text || "";
+
+    if (!currentFooter.startsWith("Estado: Pendiente") || suggestionDecisionLocks.has(messageId)) {
+        return interaction.reply({
+            content: "Esta sugerencia ya fue revisada.",
+            ephemeral: true
+        });
+    }
+
+    suggestionDecisionLocks.add(messageId);
+
+    try {
+        await interaction.deferUpdate();
+
+        const accepted = decision === "take";
+        const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+            .setColor(accepted ? 0x2ecc71 : 0x7f8c8d)
+            .setFooter({
+                text: accepted ? "Estado: ✅ Tomada en cuenta" : "Estado: ❌ No tomada"
+            });
+
+        await interaction.message.edit({
+            embeds: [updatedEmbed],
+            components: createSuggestionDecisionButtons(userId, true)
+        });
+
+        let notificationSent = false;
+        if (accepted) {
+            try {
+                const suggestionAuthor = await client.users.fetch(userId);
+                const serverName = interaction.message.embeds[0]?.fields
+                    ?.find(field => field.name === "Servidor")
+                    ?.value || "tu servidor";
+
+                await suggestionAuthor.send({
+                    content:
+                        `🎉 ¡Felicidades! Tu sugerencia para **${serverName}** fue marcada como **“Tomar en cuenta”**. ` +
+                        "Muchas gracias por ayudarnos a mejorar iCloud; tendremos muy presente tu idea en las próximas actualizaciones. 💜",
+                    allowedMentions: { parse: [] }
+                });
+                notificationSent = true;
+            } catch (error) {
+                console.error(`No pude enviar un mensaje privado al autor de la sugerencia ${messageId}:`, error);
+            }
+        }
+
+        return interaction.followUp({
+            content: accepted
+                ? notificationSent
+                    ? "✅ Sugerencia marcada como tomada en cuenta y mensaje privado enviado."
+                    : "✅ Sugerencia marcada como tomada en cuenta. No fue posible enviar el mensaje privado; quizá la persona tiene los MD cerrados."
+                : "Sugerencia marcada como no tomada en cuenta.",
+            ephemeral: true
+        });
+    } catch (error) {
+        console.error(`No pude actualizar la decisión de la sugerencia ${messageId}:`, error);
+        if (interaction.deferred || interaction.replied) {
+            return interaction.followUp({
+                content: "❌ No pude guardar la decisión. Revisa los permisos del bot en este canal.",
+                ephemeral: true
+            });
+        }
+        return interaction.reply({
+            content: "❌ No pude guardar la decisión. Revisa los permisos del bot en este canal.",
+            ephemeral: true
+        });
+    } finally {
+        suggestionDecisionLocks.delete(messageId);
+    }
+
+}
+
 client.on("interactionCreate", async interaction => {
+
+    if (interaction.isButton() && interaction.customId.startsWith("suggestion:")) {
+        await handleSuggestionDecision(interaction);
+        return;
+    }
 
     if (!interaction.isChatInputCommand()) return;
 
     void logCommandUsage(interaction);
+
+    if (interaction.commandName === "sugerencia") {
+        return handleSuggestionCommand(interaction);
+    }
 
     if (interaction.commandName === "presentacion") {
 
