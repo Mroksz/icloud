@@ -18,6 +18,11 @@ const {
     SlashCommandBuilder
 } = require("discord.js");
 const {
+    MYSTERY_CASES,
+    createMysteryEmbed,
+    createMysteryButtons
+} = require("./mystery-game");
+const {
     characters: AKINATOR_ADDITIONAL_CHARACTERS,
     questions: AKINATOR_ADDITIONAL_QUESTIONS,
     categoryNames: AKINATOR_CATEGORY_NAMES
@@ -1417,6 +1422,10 @@ const commands = [
         .setDescription("Piensa en alguien o algo y responde hasta que Akinator adivine."),
 
     new SlashCommandBuilder()
+        .setName("misterio")
+        .setDescription("Investiga un caso, reúne pistas y descubre quién fue."),
+
+    new SlashCommandBuilder()
         .setName("gifrespuestas")
         .setDescription("Activa o desactiva las respuestas del bot con GIF en este servidor.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
@@ -1709,6 +1718,7 @@ const HELP_PAGES = [
         description: [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
             "`/akinator` Piensa en alguien o algo y responde hasta que Akinator adivine.",
+            "`/misterio` Investiga un caso interactivo y acusa al sospechoso correcto.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
@@ -2175,7 +2185,7 @@ function createAkinatorQuestionEmbed(
         });
 }
 
-async function fetchAkinatorCharacterDetails(character) {
+async function fetchAkinatorCharacterImage(character) {
 
     let lastError;
 
@@ -2202,39 +2212,20 @@ async function fetchAkinatorCharacterDetails(character) {
             const imageUrl = originalImage?.toLowerCase().endsWith(".svg")
                 ? thumbnail
                 : originalImage || thumbnail;
-            const rawDescription = (
-                summary.description
-                || summary.extract
-                || ""
-            );
-            const description = typeof rawDescription === "string"
-                ? rawDescription.replace(/\s+/g, " ").trim()
-                : "";
-            const visibleDescription = description
-                ? description.slice(0, 280).trimEnd()
-                    + (description.length > 280 ? "…" : "")
-                : null;
 
-            if (imageUrl || visibleDescription) {
-                return {
-                    imageUrl: imageUrl || null,
-                    description: visibleDescription
-                };
-            }
+            if (imageUrl) return imageUrl;
 
-            lastError = new Error(
-                `Wikipedia no proporcionó una imagen ni una descripción para ${character.name} (${language}).`
-            );
+            lastError = new Error(`Wikipedia no proporcionó una imagen para ${character.name} (${language}).`);
         } catch (error) {
             lastError = error;
         }
     }
 
-    console.error(`No pude obtener información de ${character.name}:`, lastError);
-    return { imageUrl: null, description: null };
+    console.error(`No pude obtener la imagen de ${character.name}:`, lastError);
+    return null;
 }
 
-function createAkinatorResultEmbed(character, questionCount, details = {}) {
+function createAkinatorResultEmbed(character, questionCount, imageUrl) {
 
     const embed = new EmbedBuilder()
         .setColor(0x7d3c98)
@@ -2242,14 +2233,7 @@ function createAkinatorResultEmbed(character, questionCount, details = {}) {
         .setDescription(`Estabas pensando en **${character.name}**.\n**Categoría:** ${character.category || "personaje ficticio"}`)
         .setFooter({ text: `Lo adiviné en ${questionCount} preguntas.` });
 
-    if (details.description) {
-        embed.addFields({
-            name: "Dato del personaje",
-            value: details.description
-        });
-    }
-
-    if (details.imageUrl) embed.setImage(details.imageUrl);
+    if (imageUrl) embed.setImage(imageUrl);
 
     return embed;
 }
@@ -2801,6 +2785,189 @@ client.on("interactionCreate", async interaction => {
         return;
     }
 
+    if (interaction.commandName === "misterio") {
+
+        const gameId = interaction.id;
+        const mystery = pickRandomMessage(MYSTERY_CASES);
+        const revealedClues = new Set();
+        let phase = "investigation";
+
+        await interaction.reply({
+            embeds: [createMysteryEmbed(mystery, revealedClues)],
+            components: createMysteryButtons(
+                gameId,
+                mystery,
+                revealedClues
+            )
+        });
+
+        const mysteryMessage = await interaction.fetchReply();
+        const collector = mysteryMessage.createMessageComponentCollector({
+            time: 300000,
+            filter: buttonInteraction =>
+                buttonInteraction.customId.startsWith(`misterio-${gameId}-`)
+        });
+        let processingAction = false;
+
+        collector.on("collect", async buttonInteraction => {
+
+            if (processingAction) {
+                return buttonInteraction.deferUpdate().catch(error => {
+                    console.error("No pude confirmar una acción simultánea de misterio:", error);
+                });
+            }
+
+            processingAction = true;
+            const action = buttonInteraction.customId
+                .slice(`misterio-${gameId}-`.length);
+
+            try {
+                if (action.startsWith("clue-")) {
+                    const clueIndex = Number(action.slice("clue-".length));
+
+                    if (
+                        !Number.isInteger(clueIndex)
+                        || clueIndex < 0
+                        || clueIndex >= mystery.evidence.length
+                    ) {
+                        return buttonInteraction.reply({
+                            content: "No reconocí esa pista. Inténtalo de nuevo.",
+                            ephemeral: true
+                        });
+                    }
+
+                    revealedClues.add(clueIndex);
+                    return buttonInteraction.update({
+                        embeds: [createMysteryEmbed(
+                            mystery,
+                            revealedClues,
+                            phase
+                        )],
+                        components: createMysteryButtons(
+                            gameId,
+                            mystery,
+                            revealedClues,
+                            phase
+                        )
+                    });
+                }
+
+                if (action === "accuse") {
+                    phase = "accusing";
+                    return buttonInteraction.update({
+                        embeds: [createMysteryEmbed(
+                            mystery,
+                            revealedClues,
+                            phase
+                        )],
+                        components: createMysteryButtons(
+                            gameId,
+                            mystery,
+                            revealedClues,
+                            phase
+                        )
+                    });
+                }
+
+                if (action === "cancel") {
+                    phase = "investigation";
+                    return buttonInteraction.update({
+                        embeds: [createMysteryEmbed(
+                            mystery,
+                            revealedClues,
+                            phase
+                        )],
+                        components: createMysteryButtons(
+                            gameId,
+                            mystery,
+                            revealedClues,
+                            phase
+                        )
+                    });
+                }
+
+                if (action.startsWith("suspect-") && phase === "accusing") {
+                    const suspectIndex = Number(action.slice("suspect-".length));
+
+                    if (
+                        !Number.isInteger(suspectIndex)
+                        || suspectIndex < 0
+                        || suspectIndex >= mystery.suspects.length
+                    ) {
+                        return buttonInteraction.reply({
+                            content: "No reconocí a ese sospechoso. Inténtalo de nuevo.",
+                            ephemeral: true
+                        });
+                    }
+
+                    phase = "resolved";
+                    collector.stop("solved");
+                    return buttonInteraction.update({
+                        embeds: [createMysteryEmbed(
+                            mystery,
+                            revealedClues,
+                            phase,
+                            { suspectIndex }
+                        )],
+                        components: []
+                    });
+                }
+
+                if (action === "finish") {
+                    phase = "abandoned";
+                    collector.stop("abandoned");
+                    return buttonInteraction.update({
+                        embeds: [createMysteryEmbed(
+                            mystery,
+                            revealedClues,
+                            phase
+                        )],
+                        components: []
+                    });
+                }
+
+                return buttonInteraction.reply({
+                    content: "No reconocí esa acción del expediente.",
+                    ephemeral: true
+                });
+            } catch (error) {
+                console.error("Falló una acción del juego de misterio:", error);
+                const notifyError = buttonInteraction.deferred
+                    || buttonInteraction.replied
+                    ? buttonInteraction.followUp.bind(buttonInteraction)
+                    : buttonInteraction.reply.bind(buttonInteraction);
+                await notifyError({
+                    content: "No pude actualizar el expediente. Intenta pulsar el botón otra vez.",
+                    ephemeral: true
+                }).catch(followUpError => {
+                    console.error("No pude notificar el error del misterio:", followUpError);
+                });
+            } finally {
+                processingAction = false;
+            }
+
+        });
+
+        collector.on("end", (_, reason) => {
+
+            if (reason === "solved" || reason === "abandoned") return;
+
+            void mysteryMessage.edit({
+                embeds: [createMysteryEmbed(
+                    mystery,
+                    revealedClues,
+                    "timeout"
+                )],
+                components: []
+            }).catch(error => {
+                console.error("No pude cerrar el expediente de misterio:", error);
+            });
+
+        });
+
+        return;
+    }
+
     if (interaction.commandName === "oraculo") {
 
         const question = interaction.options.getString("pregunta", true);
@@ -2837,23 +3004,24 @@ client.on("interactionCreate", async interaction => {
         });
 
         const gameMessage = await interaction.fetchReply();
-        try {
-            state.dynamicQuestions = await loadAkinatorWikidataFacts(
-                state.characters
-            );
-        } catch (error) {
-            state.wikidataUnavailable = true;
-            console.error("No pude cargar datos de Wikidata para Akinator:", error);
-        }
+        void loadAkinatorWikidataFacts(state.characters)
+            .then(questions => {
+                state.dynamicQuestions = questions;
+            })
+            .catch(error => {
+                state.wikidataUnavailable = true;
+                console.error("No pude cargar datos de Wikidata para Akinator:", error);
+            });
         let candidates = rankAkinatorCharacters(state.answers, state.characters);
+
+        await new Promise(resolve =>
+            setTimeout(resolve, AKINATOR_THINKING_TIME)
+        );
+        candidates = rankAkinatorCharacters(state.answers, state.characters);
         let currentQuestion = chooseAkinatorQuestion(
             state.characters,
             state.askedQuestions,
             state.dynamicQuestions
-        );
-
-        await new Promise(resolve =>
-            setTimeout(resolve, AKINATOR_THINKING_TIME)
         );
         await gameMessage.edit({
             embeds: [createAkinatorQuestionEmbed(
@@ -2998,12 +3166,12 @@ client.on("interactionCreate", async interaction => {
 
                 if (shouldGuess) {
                     const character = pickRandomMessage(candidates);
-                    const details = await fetchAkinatorCharacterDetails(character);
+                    const imageUrl = await fetchAkinatorCharacterImage(character);
                     await gameMessage.edit({
                         embeds: [createAkinatorResultEmbed(
                             character,
                             state.questionCount,
-                            details
+                            imageUrl
                         )],
                         components: createAkinatorButtons(
                             gameId,
