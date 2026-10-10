@@ -137,7 +137,6 @@ const ORACLE_ANSWERS = [
     "Ni sí ni no: la respuesta está escondida detrás del próximo meme.",
     "La respuesta es sí, con un 73% de confianza y 100% de dramatismo."
 ];
-const AKINATOR_MAX_QUESTIONS = 30;
 const AKINATOR_THINKING_TIME = 5 * 1000;
 const AKINATOR_BASE_CHARACTERS = [
     { name: "Goku", wiki: "Goku", traits: ["anime", "male", "alien", "powers", "martial-arts", "animated"] },
@@ -330,6 +329,7 @@ const AKINATOR_BASE_CHARACTERS = [
 const AKINATOR_CHARACTERS = [
     ...AKINATOR_BASE_CHARACTERS.map(character => ({
         ...character,
+        dataCategory: character.traits.includes("game") ? "game" : "fiction",
         category: character.traits.includes("game")
             ? AKINATOR_CATEGORY_NAMES.game
             : "personaje ficticio",
@@ -341,6 +341,7 @@ const AKINATOR_CHARACTERS = [
     })),
     ...AKINATOR_ADDITIONAL_CHARACTERS.map(character => ({
         ...character,
+        dataCategory: character.category,
         category: AKINATOR_CATEGORY_NAMES[character.category]
     }))
 ].reduce((characters, character) => {
@@ -354,6 +355,7 @@ const AKINATOR_CHARACTERS = [
             ...new Set([...existingCharacter.traits, ...character.traits])
         ];
         existingCharacter.category = character.category;
+        existingCharacter.dataCategory = character.dataCategory;
         existingCharacter.wiki = character.wiki;
     } else {
         characters.push(character);
@@ -435,6 +437,166 @@ const AKINATOR_QUESTIONS = [
     { trait: "harry-potter", text: "¿Es del universo de Harry Potter?" },
     ...AKINATOR_ADDITIONAL_QUESTIONS
 ];
+
+const WIKIDATA_PROPERTIES_BY_CATEGORY = {
+    sport: ["P27", "P19", "P106", "P166", "P800"],
+    actor: ["P27", "P19", "P106", "P166", "P800"],
+    philosopher: ["P27", "P19", "P106", "P166", "P800", "P69"],
+    ruler: ["P27", "P19", "P106", "P166", "P800"],
+    scientist: ["P27", "P19", "P106", "P166", "P800", "P69"],
+    youtuber: ["P27", "P19", "P106", "P166", "P800"],
+    city: ["P17", "P131", "P571"],
+    food: ["P495", "P279", "P186"],
+    film: ["P495", "P136", "P57", "P161"],
+    fiction: ["P1080", "P1441", "P170"],
+    game: ["P1080", "P1441", "P170"]
+};
+const WIKIDATA_PROPERTY_QUESTIONS = {
+    P17: ["¿Está ubicada en {value}?", "¿Se encuentra en {value}?"],
+    P19: ["¿Nació en {value}?", "¿Su lugar de nacimiento fue {value}?"],
+    P27: ["¿Tiene ciudadanía de {value}?", "¿Es ciudadano/a de {value}?"],
+    P69: ["¿Estudió en {value}?", "¿Asistió a {value}?"],
+    P106: ["¿Se le conoce por su ocupación como {value}?", "¿Su profesión es {value}?"],
+    P1080: ["¿Pertenece al universo de ficción {value}?", "¿Su historia forma parte de {value}?"],
+    P131: ["¿Pertenece administrativamente a {value}?", "¿Está dentro de {value}?"],
+    P136: ["¿Su género es {value}?", "¿Se clasifica dentro del género {value}?"],
+    P1441: ["¿Aparece en la obra {value}?", "¿Forma parte de {value}?"],
+    P161: ["¿Participa {value} en su reparto?", "¿Actúa {value} en esta película?"],
+    P166: ["¿Recibió el reconocimiento {value}?", "¿Ganó o recibió {value}?"],
+    P170: ["¿Fue creado/a por {value}?", "¿Su creador/a es {value}?"],
+    P186: ["¿Se elabora con {value}?", "¿Uno de sus ingredientes o materiales es {value}?"],
+    P279: ["¿Es un tipo de {value}?", "¿Pertenece al grupo de {value}?"],
+    P495: ["¿Se originó en {value}?", "¿Su país de origen es {value}?"],
+    P571: ["¿Se fundó o estableció en {value}?", "¿Su origen se remonta a {value}?"],
+    P800: ["¿Se le reconoce por la obra {value}?", "¿Es conocido/a por {value}?"]
+};
+const WIKIDATA_FACT_CACHE = new Map();
+const WIKIDATA_FACT_CACHE_TTL = 24 * 60 * 60 * 1000;
+
+function normalizeAkinatorName(name) {
+
+    return name.toLocaleLowerCase("es").trim();
+}
+
+async function loadAkinatorWikidataFacts(characters) {
+
+    const now = Date.now();
+    const uncachedCharacters = characters.filter(character => {
+        const cached = WIKIDATA_FACT_CACHE.get(normalizeAkinatorName(character.name));
+        return !cached || now - cached.cachedAt >= WIKIDATA_FACT_CACHE_TTL;
+    });
+
+    if (uncachedCharacters.length > 0) {
+        const propertyIds = [...new Set(uncachedCharacters.flatMap(character =>
+            WIKIDATA_PROPERTIES_BY_CATEGORY[character.dataCategory] || []
+        ))];
+
+        if (propertyIds.length > 0) {
+            const names = [...new Set(uncachedCharacters.map(character =>
+                character.name
+            ))];
+            const nameValues = names.flatMap(name =>
+                ["en", "es"].map(language =>
+                    `${JSON.stringify(name)}@${language}`
+                )
+            ).join(" ");
+            const query = `
+                SELECT ?name ?property ?valueLabel WHERE {
+                    VALUES ?name { ${nameValues} }
+                    ?item rdfs:label ?name .
+                    FILTER(LANG(?name) = "en" || LANG(?name) = "es")
+                    VALUES ?property { ${propertyIds.map(id => `wdt:${id}`).join(" ")} }
+                    ?item ?property ?value .
+                    SERVICE wikibase:label {
+                        bd:serviceParam wikibase:language "es,en".
+                    }
+                }
+                LIMIT 1200
+            `;
+            const response = await fetch(
+                "https://query.wikidata.org/sparql",
+                {
+                    method: "POST",
+                    headers: {
+                        Accept: "application/sparql-results+json",
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "User-Agent": "SoymrDiscordBot/1.0 (Akinator)"
+                    },
+                    body: new URLSearchParams({ query }).toString(),
+                    signal: AbortSignal.timeout(8000)
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(`Wikidata respondió con HTTP ${response.status}.`);
+            }
+
+            const result = await response.json();
+            const factsByName = new Map();
+
+            for (const binding of result.results.bindings) {
+                const name = normalizeAkinatorName(binding.name.value);
+                const propertyMatch = binding.property.value.match(/P\d+$/);
+                const value = binding.valueLabel?.value?.trim();
+
+                if (!propertyMatch || !value) continue;
+
+                if (!factsByName.has(name)) factsByName.set(name, []);
+                const facts = factsByName.get(name);
+                const propertyId = propertyMatch[0];
+
+                if (
+                    facts.filter(fact => fact.propertyId === propertyId).length >= 4
+                    || facts.some(fact =>
+                        fact.propertyId === propertyId
+                        && fact.value.toLocaleLowerCase("es")
+                            === value.toLocaleLowerCase("es")
+                    )
+                ) continue;
+
+                facts.push({ propertyId, value });
+            }
+
+            for (const character of uncachedCharacters) {
+                WIKIDATA_FACT_CACHE.set(
+                    normalizeAkinatorName(character.name),
+                    {
+                        cachedAt: now,
+                        facts: factsByName.get(
+                            normalizeAkinatorName(character.name)
+                        ) || []
+                    }
+                );
+            }
+        }
+    }
+
+    const questionsByTrait = new Map();
+
+    for (const character of characters) {
+        const cached = WIKIDATA_FACT_CACHE.get(normalizeAkinatorName(character.name));
+        character.knownFactProperties = new Set();
+
+        for (const fact of cached?.facts || []) {
+            character.knownFactProperties.add(fact.propertyId);
+            const trait = `wd:${fact.propertyId}:${fact.value.toLocaleLowerCase("es")}`;
+            character.traits.push(trait);
+
+            if (questionsByTrait.has(trait)) continue;
+
+            const templates = WIKIDATA_PROPERTY_QUESTIONS[fact.propertyId];
+            if (!templates) continue;
+
+            questionsByTrait.set(trait, {
+                trait,
+                factProperty: fact.propertyId,
+                text: pickRandomMessage(templates).replace("{value}", fact.value)
+            });
+        }
+    }
+
+    return [...questionsByTrait.values()];
+}
 
 function loadEconomyData() {
 
@@ -1187,7 +1349,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("akinator")
-        .setDescription("Piensa en una persona, lugar, comida, película o personaje y responde hasta 30 preguntas."),
+        .setDescription("Piensa en alguien o algo y responde hasta que Akinator adivine."),
 
     new SlashCommandBuilder()
         .setName("gifrespuestas")
@@ -1390,7 +1552,9 @@ async function registerCommands() {
             const registeredCommands = await rest.get(scope.listRoute);
 
             for (const command of registeredCommands) {
-                if (!["8ball", "ppt"].includes(command.name)) continue;
+                if (!["8ball", "ppt", "personajes483"].includes(command.name)) {
+                    continue;
+                }
 
                 await rest.delete(scope.deleteRoute(command.id));
                 console.log(`Comando obsoleto /${command.name} eliminado (${command.id}).`);
@@ -1479,7 +1643,7 @@ const HELP_PAGES = [
         title: "🎮 Juegos y utilidades",
         description: [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
-            "`/akinator` Piensa en una persona, lugar, comida, película o personaje y responde hasta 30 preguntas.",
+            "`/akinator` Piensa en alguien o algo y responde hasta que Akinator adivine.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
@@ -1709,7 +1873,7 @@ client.on("messageCreate", async message => {
 // SLASH COMMANDS
 // ===============================
 
-function rankAkinatorCharacters(answers) {
+function rankAkinatorCharacters(answers, characters = AKINATOR_CHARACTERS) {
 
     const answerScores = {
         yes: [-2, 2],
@@ -1717,11 +1881,19 @@ function rankAkinatorCharacters(answers) {
         probably: [-1, 1],
         probably_not: [1, -1]
     };
-    const ranked = AKINATOR_CHARACTERS.map(character => ({
+    const ranked = characters.map(character => ({
         character,
         score: [...answers].reduce((score, [trait, answer]) => {
             const scores = answerScores[answer];
             if (!scores) return score;
+
+            const factProperty = trait.startsWith("wd:")
+                ? trait.split(":", 3)[1]
+                : null;
+            if (
+                factProperty
+                && !character.knownFactProperties?.has(factProperty)
+            ) return score;
 
             return score + scores[Number(character.traits.includes(trait))];
         }, 0)
@@ -1733,9 +1905,16 @@ function rankAkinatorCharacters(answers) {
         .map(candidate => candidate.character);
 }
 
-function chooseAkinatorQuestion(candidates, askedQuestions) {
+function chooseAkinatorQuestion(
+    candidates,
+    askedQuestions,
+    additionalQuestions = []
+) {
 
-    const availableQuestions = AKINATOR_QUESTIONS.filter(
+    const availableQuestions = [
+        ...AKINATOR_QUESTIONS,
+        ...additionalQuestions
+    ].filter(
         question => !askedQuestions.has(question.trait)
             && (
                 !["male", "female"].includes(question.trait)
@@ -1749,13 +1928,23 @@ function chooseAkinatorQuestion(candidates, askedQuestions) {
     let bestQuestions = [];
 
     for (const question of availableQuestions) {
-        const yesCount = candidates.filter(
+        const relevantCandidates = question.factProperty
+            ? candidates.filter(character =>
+                character.knownFactProperties?.has(question.factProperty)
+            )
+            : candidates;
+        const yesCount = relevantCandidates.filter(
             character => character.traits.includes(question.trait)
         ).length;
 
-        if (yesCount === 0 || yesCount === candidates.length) continue;
+        if (
+            yesCount === 0
+            || yesCount === relevantCandidates.length
+            || relevantCandidates.length < 2
+        ) continue;
 
-        const balance = Math.abs(candidates.length - 2 * yesCount);
+        const balance = Math.abs(relevantCandidates.length - 2 * yesCount)
+            + (candidates.length - relevantCandidates.length);
 
         if (balance < bestBalance) {
             bestBalance = balance;
@@ -1870,7 +2059,12 @@ function createAkinatorFinishedEmbed() {
         .setDescription("Gracias por jugar Akinator. Cuando quieras, inicia otra partida con `/akinator`.");
 }
 
-function createAkinatorQuestionEmbed(question, candidates, askedCount) {
+function createAkinatorQuestionEmbed(
+    question,
+    candidates,
+    askedCount,
+    wikidataUnavailable = false
+) {
 
     const categoryCounts = candidates.reduce((counts, character) => {
         counts.set(character.category, (counts.get(character.category) || 0) + 1);
@@ -1899,7 +2093,9 @@ function createAkinatorQuestionEmbed(question, candidates, askedCount) {
             value: "Sí · No · Probablemente · Probablemente no · No sé"
         })
         .setFooter({
-            text: `Base local: ${AKINATOR_CHARACTERS.length} opciones · Máximo ${AKINATOR_MAX_QUESTIONS} preguntas`
+            text: wikidataUnavailable
+                ? `Base local: ${AKINATOR_CHARACTERS.length} opciones · Wikidata no disponible; usando datos locales`
+                : `Base local: ${AKINATOR_CHARACTERS.length} opciones · Preguntas sin límite`
         });
 }
 
@@ -2525,19 +2721,35 @@ client.on("interactionCreate", async interaction => {
             answers: new Map(),
             askedQuestions: new Set(),
             questionCount: 0,
-            history: []
+            history: [],
+            characters: AKINATOR_CHARACTERS.map(character => ({
+                ...character,
+                traits: [...character.traits]
+            })),
+            dynamicQuestions: [],
+            wikidataUnavailable: false
         };
-        let candidates = rankAkinatorCharacters(state.answers);
-        let currentQuestion = chooseAkinatorQuestion(
-            AKINATOR_CHARACTERS,
-            state.askedQuestions
-        );
 
         await interaction.reply({
             embeds: [createAkinatorThinkingEmbed()]
         });
 
         const gameMessage = await interaction.fetchReply();
+        try {
+            state.dynamicQuestions = await loadAkinatorWikidataFacts(
+                state.characters
+            );
+        } catch (error) {
+            state.wikidataUnavailable = true;
+            console.error("No pude cargar datos de Wikidata para Akinator:", error);
+        }
+        let candidates = rankAkinatorCharacters(state.answers, state.characters);
+        let currentQuestion = chooseAkinatorQuestion(
+            state.characters,
+            state.askedQuestions,
+            state.dynamicQuestions
+        );
+
         await new Promise(resolve =>
             setTimeout(resolve, AKINATOR_THINKING_TIME)
         );
@@ -2545,7 +2757,8 @@ client.on("interactionCreate", async interaction => {
             embeds: [createAkinatorQuestionEmbed(
                 currentQuestion,
                 candidates,
-                state.questionCount
+                state.questionCount,
+                state.wikidataUnavailable
             )],
             components: createAkinatorButtons(gameId)
         });
@@ -2596,10 +2809,14 @@ client.on("interactionCreate", async interaction => {
                     state.askedQuestions.clear();
                     state.questionCount = 0;
                     state.history = [];
-                    candidates = rankAkinatorCharacters(state.answers);
+                    candidates = rankAkinatorCharacters(
+                        state.answers,
+                        state.characters
+                    );
                     currentQuestion = chooseAkinatorQuestion(
-                        AKINATOR_CHARACTERS,
-                        state.askedQuestions
+                        state.characters,
+                        state.askedQuestions,
+                        state.dynamicQuestions
                     );
                     collector.resetTimer();
                     await gameMessage.edit({
@@ -2619,7 +2836,8 @@ client.on("interactionCreate", async interaction => {
                         embeds: [createAkinatorQuestionEmbed(
                             currentQuestion,
                             candidates,
-                            state.questionCount
+                            state.questionCount,
+                            state.wikidataUnavailable
                         )],
                         components: createAkinatorButtons(gameId)
                     });
@@ -2634,13 +2852,17 @@ client.on("interactionCreate", async interaction => {
                     state.askedQuestions = previousState.askedQuestions;
                     state.questionCount = previousState.questionCount;
                     currentQuestion = previousState.currentQuestion;
-                    candidates = rankAkinatorCharacters(state.answers);
+                    candidates = rankAkinatorCharacters(
+                        state.answers,
+                        state.characters
+                    );
 
                     await gameMessage.edit({
                         embeds: [createAkinatorQuestionEmbed(
                             currentQuestion,
                             candidates,
-                            state.questionCount
+                            state.questionCount,
+                            state.wikidataUnavailable
                         )],
                         components: createAkinatorButtons(
                             gameId,
@@ -2661,21 +2883,16 @@ client.on("interactionCreate", async interaction => {
                 recordAkinatorAnswer(state, currentQuestion.trait, answer);
                 collector.resetTimer();
 
-                candidates = rankAkinatorCharacters(state.answers);
+                candidates = rankAkinatorCharacters(
+                    state.answers,
+                    state.characters
+                );
                 const nextQuestion = chooseAkinatorQuestion(
                     candidates,
-                    state.askedQuestions
+                    state.askedQuestions,
+                    state.dynamicQuestions
                 );
-                const fallbackQuestion = nextQuestion || (
-                    state.questionCount < AKINATOR_MAX_QUESTIONS
-                        ? chooseAkinatorQuestion(
-                            AKINATOR_CHARACTERS,
-                            state.askedQuestions
-                        )
-                        : null
-                );
-                const shouldGuess = state.questionCount >= AKINATOR_MAX_QUESTIONS
-                    || !fallbackQuestion;
+                const shouldGuess = !nextQuestion;
 
                 if (shouldGuess) {
                     const character = pickRandomMessage(candidates);
@@ -2696,12 +2913,13 @@ client.on("interactionCreate", async interaction => {
                     return;
                 }
 
-                currentQuestion = fallbackQuestion;
+                currentQuestion = nextQuestion;
                 await gameMessage.edit({
                     embeds: [createAkinatorQuestionEmbed(
                         currentQuestion,
                         candidates,
-                        state.questionCount
+                        state.questionCount,
+                        state.wikidataUnavailable
                     )],
                     components: createAkinatorButtons(
                         gameId,
