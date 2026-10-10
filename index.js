@@ -1140,6 +1140,37 @@ async function registerCommands() {
 
         console.log("Registrando comandos...");
 
+        const commandScopes = [
+            {
+                listRoute: Routes.applicationCommands(client.user.id),
+                deleteRoute: commandId =>
+                    Routes.applicationCommand(client.user.id, commandId)
+            },
+            ...[...client.guilds.cache.values()].map(guild => ({
+                listRoute: Routes.applicationGuildCommands(
+                    client.user.id,
+                    guild.id
+                ),
+                deleteRoute: commandId =>
+                    Routes.applicationGuildCommand(
+                        client.user.id,
+                        guild.id,
+                        commandId
+                    )
+            }))
+        ];
+
+        for (const scope of commandScopes) {
+            const registeredCommands = await rest.get(scope.listRoute);
+
+            for (const command of registeredCommands) {
+                if (command.name !== "8ball") continue;
+
+                await rest.delete(scope.deleteRoute(command.id));
+                console.log(`Comando obsoleto /8ball eliminado (${command.id}).`);
+            }
+        }
+
         for (const guild of client.guilds.cache.values()) {
 
             await rest.put(
