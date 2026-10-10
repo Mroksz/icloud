@@ -37,11 +37,8 @@ const CHAT_CHANNEL_ID = "1530770440992194643";
 const COMMAND_LOG_CHANNEL_ID = "1557996473151651861";
 const COMMUNITY_CHANNEL_ID = "1558002369848016966";
 const BOT_PRESENTATION_CHANNEL_ID = "1558385288877842453";
-const BOT_PRESENTATION_FILE = path.join(__dirname, "PRESENTACION-BOT.md");
-const BOT_PRESENTATION_PUBLISHED_FILE = path.join(
-    __dirname,
-    "presentation_published.json"
-);
+const BOT_INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1554656981502005268&permissions=8&integration_type=0&scope=bot";
+const BOT_PRESENTATION_IMAGE_URL = "https://cdn.discordapp.com/attachments/1531765941665398835/1558394743619059792/dd78b88c8f36d58fccde936067e339ee_1.PNG?ex=6acb47b4&is=6ac9f634&hm=c49d272e7b9d6d6d453be996bfcc07ccb8a5338d2598c7aef2a218b7011b02ff";
 const FUNNY_ROLE_ID = "1531550671285784770";
 const TWITCH_STREAM_URL = "https://www.twitch.tv/soyja_20";
 const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
@@ -1596,13 +1593,10 @@ let commands = [
 
     new SlashCommandBuilder()
         .setName("presentacion")
-        .setDescription("Publica la presentación del bot una sola vez.")
+        .setDescription("Publica la presentación de iCloud con sus comandos destacados.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
 
-].map(command => command.toJSON()).filter(command =>
-    command.name !== "presentacion"
-        || !fs.existsSync(BOT_PRESENTATION_PUBLISHED_FILE)
-);
+].map(command => command.toJSON());
 
 // ===============================
 // REGISTRAR COMANDOS
@@ -1641,15 +1635,7 @@ async function registerCommands() {
             const registeredCommands = await rest.get(scope.listRoute);
 
             for (const command of registeredCommands) {
-                if (
-                    !["8ball", "ppt", "personajes483"].includes(command.name)
-                    && !(
-                        command.name === "presentacion"
-                        && fs.existsSync(BOT_PRESENTATION_PUBLISHED_FILE)
-                    )
-                ) {
-                    continue;
-                }
+                if (!["8ball", "ppt", "personajes483"].includes(command.name)) continue;
 
                 await rest.delete(scope.deleteRoute(command.id));
                 console.log(`Comando obsoleto /${command.name} eliminado (${command.id}).`);
@@ -2624,13 +2610,6 @@ client.on("interactionCreate", async interaction => {
             });
         }
 
-        if (fs.existsSync(BOT_PRESENTATION_PUBLISHED_FILE)) {
-            return interaction.reply({
-                content: "✅ La presentación ya se publicó y este comando está desactivado.",
-                ephemeral: true
-            });
-        }
-
         if (presentationPublishing) {
             return interaction.reply({
                 content: "⏳ Ya se está publicando la presentación.",
@@ -2639,9 +2618,10 @@ client.on("interactionCreate", async interaction => {
         }
 
         presentationPublishing = true;
-        await interaction.deferReply({ ephemeral: true });
 
         try {
+            await interaction.deferReply({ ephemeral: true });
+
             const channel = await client.channels.fetch(
                 BOT_PRESENTATION_CHANNEL_ID
             );
@@ -2655,92 +2635,61 @@ client.on("interactionCreate", async interaction => {
                 );
             }
 
-            const presentation = fs.readFileSync(
-                BOT_PRESENTATION_FILE,
-                "utf8"
-            );
-            const posts = [...presentation.matchAll(
-                /```text\s*([\s\S]*?)\s*```/g
-            )].map(match => match[1].trim());
-
-            if (
-                posts.length !== 2
-                || posts.some(post => post.length > 2000)
-            ) {
-                throw new Error(
-                    "La plantilla debe contener exactamente dos mensajes de hasta 2,000 caracteres."
-                );
-            }
-
-            for (const post of posts) {
-                await channel.send({
-                    content: post,
-                    allowedMentions: { parse: [] }
+            const presentationEmbed = new EmbedBuilder()
+                .setColor(0x7656d6)
+                .setAuthor({ name: "iCloud · Tu nuevo compañero para Discord" })
+                .setTitle("✨ ¡Dale más vida a tu servidor! ✨")
+                .setDescription(
+                    "Soy **iCloud**, un bot de entretenimiento y juegos para darle más vida a tu comunidad. 🔮\n\n" +
+                    "Resuelve misterios, juega con tus amigos y descubre hasta dónde puede llegar Akinator.\n\n" +
+                    "╭・✦・━━━━━━━━━━━━━━━━・✦・╮\n" +
+                    "     DIVERSIÓN PARA TODO EL SERVER\n" +
+                    "╰・✦・━━━━━━━━━━━━━━━━・✦・╯"
+                )
+                .addFields({
+                    name: "🎮 Comandos destacados",
+                    value: [
+                        "```",
+                        "COMANDO       │ ¿QUÉ PUEDES HACER?",
+                        "──────────────┼────────────────────────",
+                        "/akinator     │ Adivina lo que imaginas",
+                        "/misterio     │ Investiga y resuelve casos",
+                        "/gato         │ Juega tres en raya",
+                        "/reto         │ Prueba un reto creativo",
+                        "```"
+                    ].join("\n")
+                }, {
+                    name: "📜 ¿Quieres conocer todos los comandos?",
+                    value: "Usa **/help** para ver la lista completa y las funciones disponibles en tu servidor."
+                })
+                .setImage(BOT_PRESENTATION_IMAGE_URL)
+                .setFooter({
+                    text: "Añádeme a tu servidor y que empiece la diversión ✨"
                 });
-            }
 
-            const temporaryMarker = `${BOT_PRESENTATION_PUBLISHED_FILE}.tmp`;
-            fs.writeFileSync(
-                temporaryMarker,
-                JSON.stringify({
-                    publishedAt: new Date().toISOString(),
-                    channelId: BOT_PRESENTATION_CHANNEL_ID
-                }),
-                "utf8"
-            );
-            fs.renameSync(temporaryMarker, BOT_PRESENTATION_PUBLISHED_FILE);
-
-            commands = commands.filter(command =>
-                command.name !== "presentacion"
+            const inviteButton = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setLabel("➕ Agregar iCloud a mi servidor")
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(BOT_INVITE_URL)
             );
 
-            let commandRemoved = true;
-            try {
-                await Promise.all(
-                    [...client.guilds.cache.values()].map(guild =>
-                        rest.put(
-                            Routes.applicationGuildCommands(
-                                client.user.id,
-                                guild.id
-                            ),
-                            { body: commands }
-                        )
-                    )
-                );
-
-                const globalCommands = await rest.get(
-                    Routes.applicationCommands(client.user.id)
-                );
-                await Promise.all(
-                    globalCommands
-                        .filter(command => command.name === "presentacion")
-                        .map(command =>
-                            rest.delete(
-                                Routes.applicationCommand(
-                                    client.user.id,
-                                    command.id
-                                )
-                            )
-                        )
-                );
-            } catch (error) {
-                commandRemoved = false;
-                console.error(
-                    "La presentación se publicó, pero no pude eliminar el comando inmediatamente:",
-                    error
-                );
-            }
+            await channel.send({
+                embeds: [presentationEmbed],
+                components: [inviteButton],
+                allowedMentions: { parse: [] }
+            });
 
             return interaction.editReply(
-                commandRemoved
-                    ? `✅ ¡Presentación publicada en <#${BOT_PRESENTATION_CHANNEL_ID}>! El comando de un solo uso ya fue retirado y no se volverá a registrar.`
-                    : `✅ ¡Presentación publicada en <#${BOT_PRESENTATION_CHANNEL_ID}>! Guardé el uso para que el comando no vuelva a registrarse; su eliminación en Discord se completará al reiniciar el bot.`
+                `✅ ¡Presentación publicada en <#${BOT_PRESENTATION_CHANNEL_ID}>! Puedes volver a usar \`/presentacion\` cuando la necesites.`
             );
         } catch (error) {
             console.error("No pude publicar la presentación del bot:", error);
-            return interaction.editReply(
-                "❌ No pude completar la publicación. Revisa el canal, los permisos del bot y la plantilla; el comando seguirá disponible para reintentar."
-            );
+            const errorMessage = "❌ No pude completar la publicación. Revisa que el bot tenga permiso para ver y enviar mensajes en el canal; el comando seguirá disponible para reintentar.";
+            if (interaction.deferred || interaction.replied) {
+                return interaction.editReply(errorMessage);
+            }
+            return interaction.reply({ content: errorMessage, ephemeral: true });
         } finally {
             presentationPublishing = false;
         }
