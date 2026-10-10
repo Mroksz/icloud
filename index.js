@@ -2767,7 +2767,7 @@ async function handleSuggestionCommand(interaction) {
             .setDescription(suggestion)
             .addFields(
                 {
-                    name: "Persona",
+                    name: "Usuario",
                     value: `${interaction.user.username} (<@${interaction.user.id}>)`,
                     inline: true
                 },
@@ -2865,13 +2865,31 @@ async function handleSuggestionDecision(interaction) {
                     ?.find(field => field.name === "Servidor")
                     ?.value || "tu servidor";
 
-                await suggestionAuthor.send({
-                    content:
-                        `🎉 ¡Felicidades! Tu sugerencia para **${serverName}** fue marcada como **“Tomar en cuenta”**. ` +
-                        "Muchas gracias por ayudarnos a mejorar iCloud; tendremos muy presente tu idea en las próximas actualizaciones. 💜",
+                const privateMessage = await suggestionAuthor.send({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor(0x7656d6)
+                            .setTitle("🎉 ¡Tu sugerencia fue tomada en cuenta!")
+                            .setDescription(
+                                `¡Felicidades! Tu sugerencia para **${serverName}** fue seleccionada. ` +
+                                "Gracias por ayudar a que iCloud siga mejorando. 💜\n\n" +
+                                "```" +
+                                "\nESTADO                      │ TOMADA EN CUENTA" +
+                                "\nPRÓXIMAS ACTUALIZACIONES    │ Tendremos muy presente tu idea." +
+                                "\n```"
+                            )
+                            .setFooter({ text: "¡Gracias por ser parte de la comunidad iCloud!" })
+                            .setTimestamp()
+                    ],
                     allowedMentions: { parse: [] }
                 });
                 notificationSent = true;
+
+                try {
+                    await privateMessage.react("💜");
+                } catch (error) {
+                    console.error(`No pude añadir la reacción de corazón al mensaje privado de sugerencia ${messageId}:`, error);
+                }
             } catch (error) {
                 console.error(`No pude enviar un mensaje privado al autor de la sugerencia ${messageId}:`, error);
             }
