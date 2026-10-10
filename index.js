@@ -93,6 +93,9 @@ const ROLE_ASSIGNMENTS_FILE = path.join(__dirname, "role_assignments.json");
 const CONNECTED_CHANNELS_FILE = path.join(__dirname, "connected_channels.json");
 const GUILD_SETTINGS_FILE = path.join(__dirname, "guild_settings.json");
 const CHAT_XP_COOLDOWN = 60 * 1000;
+const AUTOMOD_SPAM_WINDOW_MS = 7000;
+const AUTOMOD_SPAM_MESSAGE_LIMIT = 5;
+const AUTOMOD_WARNING_COOLDOWN_MS = 10000;
 const STARTING_BALANCE = 1000;
 const MINIMUM_BET = 10;
 const WORK_COOLDOWN = 60 * 60 * 1000;
@@ -798,8 +801,9 @@ function loadGuildSettings() {
             !/^\d+$/.test(guildId)
             || !settings
             || typeof settings !== "object"
-            || typeof settings.gifRepliesEnabled !== "boolean"
+            || (settings.gifRepliesEnabled !== undefined && typeof settings.gifRepliesEnabled !== "boolean")
             || typeof settings.chatStatsEnabled !== "boolean"
+            || (settings.automodEnabled !== undefined && typeof settings.automodEnabled !== "boolean")
             || !settings.users
             || typeof settings.users !== "object"
             || Array.isArray(settings.users)
@@ -830,6 +834,8 @@ function loadGuildSettings() {
 
 let guildSettings = loadGuildSettings();
 let guildSettingsSaveTimer = null;
+const automodMessageTimestamps = new Map();
+const automodLastWarningAt = new Map();
 
 function persistGuildSettings() {
 
@@ -868,8 +874,8 @@ function getGuildSettings(guildId) {
 
     if (!guildSettings[guildId]) {
         guildSettings[guildId] = {
-            gifRepliesEnabled: true,
             chatStatsEnabled: false,
+            automodEnabled: false,
             users: {},
             counter: {
                 channelId: null,
@@ -883,6 +889,10 @@ function getGuildSettings(guildId) {
             channelId: null,
             value: 0
         };
+    }
+
+    if (typeof guildSettings[guildId].automodEnabled !== "boolean") {
+        guildSettings[guildId].automodEnabled = false;
     }
 
     return guildSettings[guildId];
@@ -1579,17 +1589,6 @@ let commands = [
         .setDescription("Investiga un caso, reúne pistas y descubre quién fue."),
 
     new SlashCommandBuilder()
-        .setName("gifrespuestas")
-        .setDescription("Activa o desactiva las respuestas del bot con GIF en este servidor.")
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-        .addBooleanOption(option =>
-            option
-                .setName("activado")
-                .setDescription("Elige si el bot contestará con GIF.")
-                .setRequired(true)
-        ),
-
-    new SlashCommandBuilder()
         .setName("chatstats")
         .setDescription("Activa o desactiva niveles y estadísticas del chat en este servidor.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
@@ -1597,6 +1596,17 @@ let commands = [
             option
                 .setName("activado")
                 .setDescription("Elige si quieres registrar mensajes y experiencia.")
+                .setRequired(true)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("automod")
+        .setDescription("Activa o desactiva el filtro automático del servidor.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addBooleanOption(option =>
+            option
+                .setName("activado")
+                .setDescription("Filtra spam, invitaciones de Discord y exceso de menciones.")
                 .setRequired(true)
         ),
 
@@ -1797,7 +1807,7 @@ async function registerCommands() {
             const registeredCommands = await rest.get(scope.listRoute);
 
             for (const command of registeredCommands) {
-                if (!["8ball", "ppt", "personajes483"].includes(command.name)) continue;
+                if (!["8ball", "ppt", "personajes483", "gifrespuestas"].includes(command.name)) continue;
 
                 await rest.delete(scope.deleteRoute(command.id));
                 console.log(`Comando obsoleto /${command.name} eliminado (${command.id}).`);
@@ -1927,6 +1937,7 @@ const HELP_PAGES = [
             "`/kick usuario [razon]` Expulsa a una persona. Requiere Expulsar miembros.",
             "`/ban usuario [razon]` Banea a una persona. Requiere Banear miembros.",
             "`/timeout usuario minutos [razon]` Aplica un timeout. Requiere Moderar miembros.",
+            "`/automod activado` Filtra spam, invitaciones de Discord y más de 5 menciones; borra el mensaje y avisa, sin timeout ni ban. Requiere que el bot pueda gestionar mensajes. Solo administradores.",
         ].join("\n\n")
     },
     {
@@ -1934,7 +1945,6 @@ const HELP_PAGES = [
         description: [
             "`/conectar canal` Enlaza el canal elegido con los demás canales conectados de otros servidores. Un administrador de cada servidor debe configurarlo; los mensajes se comparten entre todos.",
             "`/sugerencia idea` Envía una idea al equipo de iCloud para que la revise.",
-            "`/gifrespuestas activado` Enciende o apaga las respuestas con GIF. Solo administradores.",
             "`/chatstats activado` Activa o desactiva niveles y estadísticas del chat. Solo administradores.",
             "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores."
         ].join("\n\n")
@@ -2293,6 +2303,97 @@ async function handleCounterMessage(message) {
 
 }
 
+function detectAutomodViolation(message, settings) {
+
+    const invitePattern = /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[A-Za-z0-9-]+/i;
+    if (invitePattern.test(message.content)) {
+        return "No se permiten invitaciones a servidores de Discord.";
+    }
+
+    const mentionCount = message.mentions.users.size + message.mentions.roles.size;
+    if (message.mentions.everyone || mentionCount > 5) {
+        return "El mensaje excede el límite de menciones permitido (5).";
+    }
+
+    if (settings.counter.channelId !== message.channel.id) {
+        const key = `${message.guild.id}:${message.author.id}`;
+        const now = Date.now();
+        const timestamps = (automodMessageTimestamps.get(key) || [])
+            .filter(timestamp => now - timestamp < AUTOMOD_SPAM_WINDOW_MS);
+        timestamps.push(now);
+        automodMessageTimestamps.set(key, timestamps);
+
+        if (automodMessageTimestamps.size > 5000) {
+            for (const [userKey, userTimestamps] of automodMessageTimestamps) {
+                if (!userTimestamps.length || now - userTimestamps.at(-1) >= AUTOMOD_SPAM_WINDOW_MS) {
+                    automodMessageTimestamps.delete(userKey);
+                }
+            }
+        }
+
+        if (timestamps.length > AUTOMOD_SPAM_MESSAGE_LIMIT) {
+            automodMessageTimestamps.delete(key);
+            return `Se detectaron más de ${AUTOMOD_SPAM_MESSAGE_LIMIT} mensajes en ${AUTOMOD_SPAM_WINDOW_MS / 1000} segundos.`;
+        }
+    }
+
+    return null;
+
+}
+
+async function handleAutomodMessage(message) {
+
+    const settings = getGuildSettings(message.guild.id);
+    if (!settings.automodEnabled || message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return false;
+    }
+
+    const violation = detectAutomodViolation(message, settings);
+    if (!violation) return false;
+
+    let messageDeleted = false;
+    try {
+        await message.delete();
+        messageDeleted = true;
+    } catch (error) {
+        console.error(`No pude borrar un mensaje filtrado en ${message.guild.name}:`, error);
+    }
+
+    const key = `${message.guild.id}:${message.author.id}`;
+    const now = Date.now();
+    const lastWarningAt = automodLastWarningAt.get(key) || 0;
+    if (now - lastWarningAt >= AUTOMOD_WARNING_COOLDOWN_MS) {
+        automodLastWarningAt.set(key, now);
+
+        if (automodLastWarningAt.size > 5000) {
+            for (const [userKey, warningAt] of automodLastWarningAt) {
+                if (now - warningAt >= AUTOMOD_WARNING_COOLDOWN_MS) {
+                    automodLastWarningAt.delete(userKey);
+                }
+            }
+        }
+
+        try {
+            const warning = await message.channel.send({
+                content: messageDeleted
+                    ? `⚠️ <@${message.author.id}> tu mensaje fue eliminado: ${violation}`
+                    : `⚠️ <@${message.author.id}> detecté un mensaje que incumple las reglas automáticas, pero no pude borrarlo. Pide ayuda a un moderador. Motivo: ${violation}`,
+                allowedMentions: { parse: [], users: [message.author.id] }
+            });
+            setTimeout(() => {
+                void warning.delete().catch(error => {
+                    console.error("No pude borrar el aviso temporal del automod:", error);
+                });
+            }, 7000).unref();
+        } catch (error) {
+            console.error(`No pude avisar al autor de un mensaje filtrado en ${message.guild.name}:`, error);
+        }
+    }
+
+    return true;
+
+}
+
 client.on("messageCreate", async message => {
 
     // Ignorar bots
@@ -2301,6 +2402,8 @@ client.on("messageCreate", async message => {
     // Ignorar mensajes privados
     if (!message.guild) return;
 
+    if (await handleAutomodMessage(message)) return;
+
     if (await handleCounterMessage(message)) return;
 
     const botReplyType = message.guild.id === PERSONALITY_GUILD_ID
@@ -2308,15 +2411,6 @@ client.on("messageCreate", async message => {
         : null;
 
     if (botReplyType) {
-        if (
-            botReplyType === "gif"
-            && !getGuildSettings(message.guild.id).gifRepliesEnabled
-        ) {
-            recordChatMessage(message);
-            await relayCommunityMessage(message);
-            return;
-        }
-
         try {
 
             await relayCommunityMessage(message);
@@ -3322,7 +3416,70 @@ client.on("interactionCreate", async interaction => {
 
     if (await handleEconomyCommand(interaction)) return;
 
-    if (interaction.commandName === "gifrespuestas" || interaction.commandName === "chatstats") {
+    if (interaction.commandName === "automod") {
+
+        if (!interaction.guild) {
+            return interaction.reply({
+                content: "❌ Este comando solo se puede usar dentro de un servidor.",
+                ephemeral: true
+            });
+        }
+
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({
+                content: "❌ Solo los administradores pueden cambiar esta configuración.",
+                ephemeral: true
+            });
+        }
+
+        const enabled = interaction.options.getBoolean("activado", true);
+        if (enabled) {
+            try {
+                const botMember = await interaction.guild.members.fetchMe();
+                const permissions = botMember.permissionsIn(interaction.channel);
+                if (!permissions.has([
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.ManageMessages
+                ])) {
+                    return interaction.reply({
+                        content: "❌ Para activar el automod necesito Ver canal, Enviar mensajes y Gestionar mensajes en este canal. Confirma que también tenga esos permisos en los canales que quieras proteger.",
+                        ephemeral: true
+                    });
+                }
+            } catch (error) {
+                console.error(`No pude comprobar permisos para automod en ${interaction.guild.name}:`, error);
+                return interaction.reply({
+                    content: "❌ No pude comprobar los permisos del bot. Revisa su acceso al servidor e inténtalo de nuevo.",
+                    ephemeral: true
+                });
+            }
+        }
+
+        const settings = getGuildSettings(interaction.guild.id);
+        const previousValue = settings.automodEnabled;
+        settings.automodEnabled = enabled;
+
+        try {
+            saveGuildSettings();
+        } catch (error) {
+            settings.automodEnabled = previousValue;
+            console.error(`No pude guardar la configuración de automod para ${interaction.guild.name}:`, error);
+            return interaction.reply({
+                content: "❌ No pude guardar el cambio. Inténtalo de nuevo.",
+                ephemeral: true
+            });
+        }
+
+        return interaction.reply({
+            content: enabled
+                ? "✅ Automod activado. Eliminaré spam (más de 5 mensajes en 7 segundos), invitaciones de Discord y mensajes con más de 5 menciones. Avisaré al autor; no aplicaré timeout ni ban."
+                : "✅ Automod desactivado para este servidor.",
+            ephemeral: true
+        });
+    }
+
+    if (interaction.commandName === "chatstats") {
 
         if (!interaction.guild) {
             return interaction.reply({
@@ -3340,16 +3497,13 @@ client.on("interactionCreate", async interaction => {
 
         const settings = getGuildSettings(interaction.guild.id);
         const enabled = interaction.options.getBoolean("activado", true);
-        const settingName = interaction.commandName === "gifrespuestas"
-            ? "gifRepliesEnabled"
-            : "chatStatsEnabled";
-        const previousValue = settings[settingName];
-        settings[settingName] = enabled;
+        const previousValue = settings.chatStatsEnabled;
+        settings.chatStatsEnabled = enabled;
 
         try {
             saveGuildSettings();
         } catch (error) {
-            settings[settingName] = previousValue;
+            settings.chatStatsEnabled = previousValue;
             console.error("No pude guardar la configuración del servidor:", error);
             return interaction.reply({
                 content: "❌ No pude guardar el cambio. Inténtalo de nuevo.",
@@ -3357,13 +3511,9 @@ client.on("interactionCreate", async interaction => {
             });
         }
 
-        const confirmation = interaction.commandName === "gifrespuestas"
-            ? enabled
-                ? "✅ Activé las respuestas con GIF en este servidor."
-                : "✅ Desactivé las respuestas con GIF en este servidor. Las respuestas de texto al mencionarme siguen activas."
-            : enabled
-                ? "✅ Activé niveles y estadísticas del chat para este servidor."
-                : "✅ Desactivé el registro de chat en este servidor. Las estadísticas anteriores se conservarán.";
+        const confirmation = enabled
+            ? "✅ Activé niveles y estadísticas del chat para este servidor."
+            : "✅ Desactivé el registro de chat en este servidor. Las estadísticas anteriores se conservarán.";
 
         return interaction.reply({ content: confirmation, ephemeral: true });
     }
