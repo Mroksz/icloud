@@ -127,6 +127,54 @@ const ENTERTAINMENT_CHALLENGES = [
     "Crea un nombre de banda usando el clima de hoy y el último objeto que viste.",
     "Explica por qué los calcetines desaparecidos están organizando una rebelión."
 ];
+const SILLY_POWERS = [
+    { power: "Encontrar cualquier objeto perdido", drawback: "pero solo después de comprar un reemplazo." },
+    { power: "Hablar con las palomas", drawback: "aunque todas te piden que les debas dinero." },
+    { power: "Teletransportarte", drawback: "pero apareces siempre a dos metros de donde querías." },
+    { power: "Leer la mente", drawback: "pero solo escuchas la canción que alguien tiene pegada." },
+    { power: "Detener el tiempo", drawback: "pero tú también te quedas congelado." },
+    { power: "Convertir agua en café", drawback: "pero únicamente café descafeinado y tibio." },
+    { power: "Controlar el clima", drawback: "pero solo dentro de una habitación pequeña." },
+    { power: "Correr a velocidad supersónica", drawback: "pero solo cuando vas tarde al baño." },
+    { power: "Entender a los animales", drawback: "y todos quieren que les arregles sus problemas." },
+    { power: "Hacer aparecer comida", drawback: "pero siempre es una sola aceituna." }
+];
+const SILLY_EXCUSES = [
+    "No llegué tarde: el reloj se adelantó para sorprenderme.",
+    "Mi alarma sonó, pero el comité de almohadas rechazó la propuesta.",
+    "Un pato me miró con demasiada intensidad y tuve que replantearme el día.",
+    "Salí a tiempo, pero mi sombra tomó una ruta alternativa.",
+    "El Wi-Fi me pidió ayuda emocional y no pude dejarlo así.",
+    "Mi yo del futuro me dijo que no viniera. Parecía convincente.",
+    "Me detuvo una reunión urgente de mis calcetines desaparecidos.",
+    "El café todavía no había terminado de cargar.",
+    "Tuve que esperar a que mi planta terminara de contarme un chisme.",
+    "Un portal interdimensional apareció en la cocina. Era el refrigerador, pero igual."
+];
+const VILLAIN_NAMES = [
+    "El Conde del Wi-Fi Lento",
+    "Doctora Migaja",
+    "El Misterioso Señor Calcetín",
+    "La Sombra del Refrigerador",
+    "Capitán Spoiler",
+    "La Reina del Lunes"
+];
+const VILLAIN_PLANS = [
+    "reemplazar todos los semáforos por ruletas",
+    "esconder el botón de posponer la alarma",
+    "cambiar todas las cucharas por tenedores",
+    "hacer que cada canción termine justo antes del coro",
+    "ponerle contraseña a todas las puertas automáticas",
+    "convencer a los gatos de que las 4 a. m. es hora de karaoke"
+];
+const VILLAIN_WEAKNESSES = [
+    "un video de perritos",
+    "una siesta de veinte minutos",
+    "un sándwich perfectamente preparado",
+    "que le digan «buen trabajo»",
+    "un chiste malo contado con mucha confianza",
+    "una oferta de dos por uno"
+];
 const ORACLE_OPENERS = [
     "Las estrellas consultaron el chat y dicen:",
     "Mi bola mágica hizo una pausa dramática y responde:",
@@ -1497,6 +1545,18 @@ let commands = [
         ),
 
     new SlashCommandBuilder()
+        .setName("superpoder")
+        .setDescription("Descubre tu superpoder inútil y su ridículo efecto secundario."),
+
+    new SlashCommandBuilder()
+        .setName("excusa")
+        .setDescription("Genera una excusa completamente absurda."),
+
+    new SlashCommandBuilder()
+        .setName("villano")
+        .setDescription("Crea tu identidad de villano, plan maestro y punto débil."),
+
+    new SlashCommandBuilder()
         .setName("clear")
         .setDescription("Elimina mensajes.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
@@ -1753,6 +1813,9 @@ const HELP_PAGES = [
             "`/misterio` Investiga un caso interactivo y acusa al sospechoso correcto.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
+            "`/superpoder` Descubre un poder absurdo con un efecto secundario peor.",
+            "`/excusa` Consigue una excusa disparatada para cualquier situación.",
+            "`/villano` Genera tu nombre, plan maestro y debilidad secreta.",
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
             "`/topniveles` Mira el ranking de niveles de este servidor.",
             "`/topchat` Mira quién ha escrito más en este servidor.",
@@ -3431,6 +3494,49 @@ client.on("interactionCreate", async interaction => {
             embeds: [embed],
             allowedMentions: { parse: [] }
         });
+    }
+
+    if (interaction.commandName === "superpoder") {
+
+        const result = pickRandomMessage(SILLY_POWERS);
+        const embed = new EmbedBuilder()
+            .setColor(0x9b59b6)
+            .setTitle("🦸 Tu superpoder totalmente oficial")
+            .setDescription(
+                `**Poder:** ${result.power}\n\n` +
+                `**Efecto secundario:** ${result.drawback}`
+            )
+            .setFooter({ text: `Asignado a ${interaction.user.username} por el Departamento de Poderes Dudosos` });
+
+        return interaction.reply({ embeds: [embed] });
+    }
+
+    if (interaction.commandName === "excusa") {
+
+        const embed = new EmbedBuilder()
+            .setColor(0xf1c40f)
+            .setTitle("🫠 Generador de excusas")
+            .setDescription(`> ${pickRandomMessage(SILLY_EXCUSES)}`)
+            .setFooter({ text: `Excusa certificada para ${interaction.user.username} · No garantizamos que funcione` });
+
+        return interaction.reply({ embeds: [embed] });
+    }
+
+    if (interaction.commandName === "villano") {
+
+        const villain = pickRandomMessage(VILLAIN_NAMES);
+        const plan = pickRandomMessage(VILLAIN_PLANS);
+        const weakness = pickRandomMessage(VILLAIN_WEAKNESSES);
+        const embed = new EmbedBuilder()
+            .setColor(0x8e44ad)
+            .setTitle(`😈 Informe de villano: ${villain}`)
+            .addFields(
+                { name: "🎯 Plan maestro", value: `Intentará ${plan}.` },
+                { name: "🧀 Debilidad secreta", value: `Todo su plan se derrumba ante ${weakness}.` }
+            )
+            .setFooter({ text: `Identidad asignada a ${interaction.user.username} · Villanía de baja peligrosidad` });
+
+        return interaction.reply({ embeds: [embed] });
     }
 
     if (interaction.commandName === "akinator") {
