@@ -132,8 +132,8 @@ const ORACLE_ANSWERS = [
     "Ni sí ni no: la respuesta está escondida detrás del próximo meme.",
     "La respuesta es sí, con un 73% de confianza y 100% de dramatismo."
 ];
-const AKINATOR_MAX_QUESTIONS = 12;
-const AKINATOR_MIN_GUESSES = 6;
+const AKINATOR_MAX_QUESTIONS = 20;
+const AKINATOR_MIN_GUESSES = 12;
 const AKINATOR_CHARACTERS = [
     { name: "Goku", wiki: "Goku", traits: ["anime", "male", "alien", "powers", "martial-arts", "animated"] },
     { name: "Naruto Uzumaki", wiki: "Naruto Uzumaki", traits: ["anime", "male", "human", "powers", "ninja", "animated"] },
@@ -776,6 +776,7 @@ const client = new Client({
     ]
 });
 
+const PERSONALITY_GUILD_ID = "1530770439704674344";
 const BOT_REPLY_GIF_URLS = [
     "https://tenor.com/view/andrew-r-personality-likes-about-self-cv-gif-15418064",
     "https://klipy.com/gifs/clown-9",
@@ -806,7 +807,11 @@ const BOT_MENTION_MESSAGES = [
     "Soy adorable, ¿a que sí?",
     "Soy interesante... aunque me menciones solo para comprobarlo."
 ];
-const WELCOME_EMOJIS = "<:emoji_5:1531191935354536018> <:emoji_17:1531194038676357140> <:sunglas:1531564951049732107>";
+const WELCOME_EMOJIS = [
+    "<:emoji_5:1531191935354536018>",
+    "<:emoji_17:1531194038676357140>",
+    "<:sunglas:1531564951049732107>"
+];
 const BOT_GIF_REPLY_EMOJIS = [
     "<:emoji_30:1531561367834853416>",
     "<:emoji_16:1531194004333396049>",
@@ -816,11 +821,11 @@ const BOT_GIF_REPLY_EMOJIS = [
     "<:agent:1531565321079488685>"
 ];
 const WELCOME_MESSAGES = [
-    memberId => `${WELCOME_EMOJIS} ¡Bienvenido, <@${memberId}>! El caos ya tiene refuerzos.`,
-    memberId => `${WELCOME_EMOJIS} ¡Llegó <@${memberId}>! Ponte cómodo; el bot ya estaba hablando solo.`,
-    memberId => `${WELCOME_EMOJIS} ¡Bienvenido a bordo, <@${memberId}>! La cordura es opcional y el caos viene incluido.`,
-    memberId => `${WELCOME_EMOJIS} ¡Se sumó <@${memberId}>! Ahora somos oficialmente más que los errores del bot.`,
-    memberId => `${WELCOME_EMOJIS} ¡Hola, <@${memberId}>! Si el bot te saluda primero, no significa que sepa lo que hace.`
+    (memberId, emoji) => `${emoji} ¡Bienvenido, <@${memberId}>! El caos ya tiene refuerzos.`,
+    (memberId, emoji) => `¡Llegó <@${memberId}>! Ponte cómodo; el bot ya estaba hablando solo. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Bienvenido a bordo, <@${memberId}>! La cordura es opcional y el caos viene incluido.`,
+    (memberId, emoji) => `¡Se sumó <@${memberId}>! Ahora somos oficialmente más que los errores del bot. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Hola, <@${memberId}>! Si el bot te saluda primero, no significa que sepa lo que hace.`
 ];
 
 function pickRandomMessage(messages) {
@@ -936,16 +941,6 @@ const commands = [
         .setDescription("Comprueba si el bot está funcionando."),
 
     new SlashCommandBuilder()
-        .setName("ppt")
-        .setDescription("Juega piedra, papel o tijera contra el bot o una persona.")
-        .addUserOption(option =>
-            option
-                .setName("oponente")
-                .setDescription("Persona contra la que quieres jugar; vacío para jugar contra el bot.")
-                .setRequired(false)
-        ),
-
-    new SlashCommandBuilder()
         .setName("help")
         .setDescription("Muestra los comandos del bot."),
 
@@ -961,7 +956,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("akinator")
-        .setDescription("Piensa en un personaje y deja que el bot intente adivinarlo."),
+        .setDescription("Piensa en un personaje y responde hasta 20 preguntas para que el bot lo adivine."),
 
     new SlashCommandBuilder()
         .setName("gifrespuestas")
@@ -1164,10 +1159,10 @@ async function registerCommands() {
             const registeredCommands = await rest.get(scope.listRoute);
 
             for (const command of registeredCommands) {
-                if (command.name !== "8ball") continue;
+                if (!["8ball", "ppt"].includes(command.name)) continue;
 
                 await rest.delete(scope.deleteRoute(command.id));
-                console.log(`Comando obsoleto /8ball eliminado (${command.id}).`);
+                console.log(`Comando obsoleto /${command.name} eliminado (${command.id}).`);
             }
         }
 
@@ -1253,8 +1248,7 @@ const HELP_PAGES = [
         title: "🎮 Juegos y utilidades",
         description: [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
-            "`/akinator` Piensa en un personaje y responde con los botones para que el bot lo adivine.",
-            "`/ppt [oponente]` Juega piedra, papel o tijera contra el bot o una persona.",
+            "`/akinator` Piensa en un personaje y responde hasta 20 preguntas para que el bot lo adivine.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
@@ -1308,42 +1302,6 @@ function createHelpButtons(pageIndex, interactionId, disabled = false) {
                 .setDisabled(disabled || pageIndex === HELP_PAGES.length - 1)
         )
     ];
-
-}
-
-function createRockPaperScissorsButtons(
-    interactionId,
-    choicesDisabled = false,
-    includeRematch = false,
-    rematchDisabled = false
-) {
-
-    const choices = ["piedra", "papel", "tijera"];
-    const rows = [
-        new ActionRowBuilder().addComponents(
-            ...choices.map(choice =>
-                new ButtonBuilder()
-                    .setCustomId(`ppt-${interactionId}-${choice}`)
-                    .setLabel(choice[0].toUpperCase() + choice.slice(1))
-                    .setStyle(ButtonStyle.Primary)
-                    .setDisabled(choicesDisabled)
-            )
-        )
-    ];
-
-    if (includeRematch) {
-        rows.push(
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`ppt-${interactionId}-rematch`)
-                    .setLabel("Revancha")
-                    .setStyle(ButtonStyle.Success)
-                    .setDisabled(rematchDisabled)
-            )
-        );
-    }
-
-    return rows;
 
 }
 
@@ -1438,7 +1396,10 @@ client.on("guildMemberAdd", async member => {
         }
 
         await channel.send({
-            content: pickRandomMessage(WELCOME_MESSAGES)(member.id),
+            content: pickRandomMessage(WELCOME_MESSAGES)(
+                member.id,
+                pickRandomMessage(WELCOME_EMOJIS)
+            ),
             allowedMentions: {
                 parse: [],
                 users: [member.id]
@@ -1461,7 +1422,9 @@ client.on("messageCreate", async message => {
     // Ignorar mensajes privados
     if (!message.guild) return;
 
-    const botReplyType = getBotReplyType(message);
+    const botReplyType = message.guild.id === PERSONALITY_GUILD_ID
+        ? getBotReplyType(message)
+        : null;
 
     if (botReplyType) {
         if (
@@ -2277,9 +2240,16 @@ client.on("interactionCreate", async interaction => {
                     questionPool,
                     state.askedQuestions
                 );
+                const fallbackQuestion = nextQuestion || (
+                    state.questionCount < AKINATOR_MAX_QUESTIONS
+                        ? chooseAkinatorQuestion(
+                            AKINATOR_CHARACTERS,
+                            state.askedQuestions
+                        )
+                        : null
+                );
                 const shouldGuess = state.questionCount >= AKINATOR_MAX_QUESTIONS
-                    || (candidates.length === 1 && state.questionCount >= AKINATOR_MIN_GUESSES)
-                    || !nextQuestion;
+                    || !fallbackQuestion;
 
                 if (shouldGuess) {
                     collector.stop("guessed");
@@ -2296,7 +2266,7 @@ client.on("interactionCreate", async interaction => {
                     return;
                 }
 
-                currentQuestion = nextQuestion;
+                currentQuestion = fallbackQuestion;
                 await gameMessage.edit({
                     embeds: [createAkinatorQuestionEmbed(
                         currentQuestion,
@@ -2400,176 +2370,6 @@ client.on("interactionCreate", async interaction => {
             await interaction.editReply({
                 components: createHelpButtons(pageIndex, interaction.id, true)
             }).catch(() => {});
-
-        });
-
-        return;
-
-    }
-
-    // =================================
-    // PIEDRA, PAPEL O TIJERA
-    // =================================
-
-    if (interaction.commandName === "ppt") {
-
-        const opponent = interaction.options.getUser("oponente");
-
-        if (opponent?.id === interaction.user.id) {
-            return interaction.reply({
-                content: "No puedes jugar contra ti mismo.",
-                ephemeral: true
-            });
-        }
-
-        if (opponent?.bot) {
-            return interaction.reply({
-                content: "Elige a una persona o deja el oponente vacío para jugar contra el bot.",
-                ephemeral: true
-            });
-        }
-
-        const choices = ["piedra", "papel", "tijera"];
-        const winningChoices = {
-            piedra: "tijera",
-            papel: "piedra",
-            tijera: "papel"
-        };
-        const playerIds = [interaction.user.id, ...(opponent ? [opponent.id] : [])];
-        const playerChoices = new Map();
-        let roundFinished = false;
-
-        const createPrompt = () => opponent
-            ? `${interaction.user} retó a ${opponent} a piedra, papel o tijera. Elijan sin mirar la jugada del otro.`
-            : `${interaction.user}, elige tu jugada contra el bot:`;
-
-        await interaction.reply({
-            content: createPrompt(),
-            components: createRockPaperScissorsButtons(interaction.id),
-            allowedMentions: { parse: [], users: playerIds }
-        });
-
-        const gameMessage = await interaction.fetchReply();
-        const collector = gameMessage.createMessageComponentCollector({
-            time: 120000
-        });
-
-        collector.on("collect", async buttonInteraction => {
-
-            if (!playerIds.includes(buttonInteraction.user.id)) {
-                return buttonInteraction.reply({
-                    content: "No participas en esta partida.",
-                    ephemeral: true
-                });
-            }
-
-            const choice = buttonInteraction.customId.split("-").pop();
-
-            if (choice === "rematch") {
-                if (!roundFinished) {
-                    return buttonInteraction.reply({
-                        content: "La ronda todavía no termina.",
-                        ephemeral: true
-                    });
-                }
-
-                playerChoices.clear();
-                roundFinished = false;
-                collector.resetTimer();
-
-                return buttonInteraction.update({
-                    content: createPrompt(),
-                    components: createRockPaperScissorsButtons(interaction.id),
-                    allowedMentions: { parse: [], users: playerIds }
-                });
-            }
-
-            if (roundFinished) {
-                return buttonInteraction.reply({
-                    content: "La ronda terminó. Pulsa Revancha para jugar otra vez.",
-                    ephemeral: true
-                });
-            }
-
-            if (!choices.includes(choice)) {
-                return buttonInteraction.reply({
-                    content: "Esa jugada no es válida.",
-                    ephemeral: true
-                });
-            }
-
-            if (playerChoices.has(buttonInteraction.user.id)) {
-                return buttonInteraction.reply({
-                    content: "Ya elegiste; espera a que termine la ronda.",
-                    ephemeral: true
-                });
-            }
-
-            playerChoices.set(buttonInteraction.user.id, choice);
-
-            if (!opponent) {
-                const botChoice = choices[Math.floor(Math.random() * choices.length)];
-                const result = choice === botChoice
-                    ? "Empate, nadie pudo presumir esta vez."
-                    : winningChoices[choice] === botChoice
-                        ? "¡Ganaste! El bot va a pedir la revancha."
-                        : "Ganó el bot. Exige una auditoría de sus manos digitales.";
-
-                roundFinished = true;
-
-                return buttonInteraction.update({
-                    content: `Tú: **${choice}** | Bot: **${botChoice}**\n${result}`,
-                    components: createRockPaperScissorsButtons(interaction.id, true, true),
-                    allowedMentions: { parse: [], users: playerIds }
-                });
-            }
-
-            if (playerChoices.size < playerIds.length) {
-                const waitingFor = buttonInteraction.user.id === interaction.user.id
-                    ? opponent
-                    : interaction.user;
-
-                return buttonInteraction.update({
-                    content: `${buttonInteraction.user} ya eligió. Esperando a ${waitingFor}.`,
-                    components: createRockPaperScissorsButtons(interaction.id),
-                    allowedMentions: { parse: [], users: playerIds }
-                });
-            }
-
-            const firstChoice = playerChoices.get(interaction.user.id);
-            const secondChoice = playerChoices.get(opponent.id);
-            const result = firstChoice === secondChoice
-                ? "Empate, nadie pudo presumir esta vez."
-                : winningChoices[firstChoice] === secondChoice
-                    ? `¡Ganó ${interaction.user}!`
-                    : `¡Ganó ${opponent}!`;
-
-            roundFinished = true;
-
-            await buttonInteraction.update({
-                content: `${interaction.user}: **${firstChoice}** | ${opponent}: **${secondChoice}**\n${result}`,
-                components: createRockPaperScissorsButtons(interaction.id, true, true),
-                allowedMentions: { parse: [], users: playerIds }
-            });
-
-        });
-
-        collector.on("end", async (_, reason) => {
-
-            if (reason !== "time") return;
-
-            if (!roundFinished) {
-                roundFinished = true;
-                await interaction.editReply({
-                    content: "Se acabó el tiempo. La ronda quedó sin terminar.",
-                    components: createRockPaperScissorsButtons(interaction.id, true),
-                    allowedMentions: { parse: [], users: playerIds }
-                }).catch(() => {});
-            } else {
-                await interaction.editReply({
-                    components: createRockPaperScissorsButtons(interaction.id, true, true, true)
-                }).catch(() => {});
-            }
 
         });
 
