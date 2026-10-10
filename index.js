@@ -17,6 +17,11 @@ const {
     Routes,
     SlashCommandBuilder
 } = require("discord.js");
+const {
+    characters: AKINATOR_ADDITIONAL_CHARACTERS,
+    questions: AKINATOR_ADDITIONAL_QUESTIONS,
+    categoryNames: AKINATOR_CATEGORY_NAMES
+} = require("./akinator-data");
 
 // ===============================
 // CONFIGURACIÓN
@@ -132,8 +137,8 @@ const ORACLE_ANSWERS = [
     "Ni sí ni no: la respuesta está escondida detrás del próximo meme.",
     "La respuesta es sí, con un 73% de confianza y 100% de dramatismo."
 ];
-const AKINATOR_MAX_QUESTIONS = 20;
-const AKINATOR_CHARACTERS = [
+const AKINATOR_MAX_QUESTIONS = 30;
+const AKINATOR_BASE_CHARACTERS = [
     { name: "Goku", wiki: "Goku", traits: ["anime", "male", "alien", "powers", "martial-arts", "animated"] },
     { name: "Naruto Uzumaki", wiki: "Naruto Uzumaki", traits: ["anime", "male", "human", "powers", "ninja", "animated"] },
     { name: "Monkey D. Luffy", wiki: "Monkey D. Luffy", traits: ["anime", "male", "human", "powers", "pirate", "animated"] },
@@ -321,6 +326,40 @@ const AKINATOR_CHARACTERS = [
     { name: "Mr. Bean", wiki: "Mr. Bean", traits: ["tv", "male", "human"] },
     { name: "Among Us Crewmate", wiki: "Among Us", traits: ["game", "alien", "animated"] }
 ];
+const AKINATOR_CHARACTERS = [
+    ...AKINATOR_BASE_CHARACTERS.map(character => ({
+        ...character,
+        category: character.traits.includes("game")
+            ? AKINATOR_CATEGORY_NAMES.game
+            : "personaje ficticio",
+        traits: [
+            ...character.traits,
+            "kind-fiction",
+            ...(character.traits.includes("game") ? ["kind-game"] : [])
+        ]
+    })),
+    ...AKINATOR_ADDITIONAL_CHARACTERS.map(character => ({
+        ...character,
+        category: AKINATOR_CATEGORY_NAMES[character.category]
+    }))
+].reduce((characters, character) => {
+    const existingCharacter = characters.find(
+        existing => existing.name.toLocaleLowerCase("es")
+            === character.name.toLocaleLowerCase("es")
+    );
+
+    if (existingCharacter) {
+        existingCharacter.traits = [
+            ...new Set([...existingCharacter.traits, ...character.traits])
+        ];
+        existingCharacter.category = character.category;
+        existingCharacter.wiki = character.wiki;
+    } else {
+        characters.push(character);
+    }
+
+    return characters;
+}, []);
 const AKINATOR_QUESTIONS = [
     { trait: "anime", text: "¿Tu personaje viene del anime o manga?" },
     { trait: "game", text: "¿Tu personaje aparece principalmente en videojuegos?" },
@@ -392,7 +431,8 @@ const AKINATOR_QUESTIONS = [
     { trait: "ninjago", text: "¿Es del universo de Ninjago?" },
     { trait: "avatar", text: "¿Es del universo de Avatar: La leyenda de Aang?" },
     { trait: "star-wars", text: "¿Es del universo de Star Wars?" },
-    { trait: "harry-potter", text: "¿Es del universo de Harry Potter?" }
+    { trait: "harry-potter", text: "¿Es del universo de Harry Potter?" },
+    ...AKINATOR_ADDITIONAL_QUESTIONS
 ];
 
 function loadEconomyData() {
@@ -1146,7 +1186,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("akinator")
-        .setDescription("Piensa en un personaje y responde hasta 20 preguntas para que el bot lo adivine."),
+        .setDescription("Piensa en una persona, lugar, comida, película o personaje y responde hasta 30 preguntas."),
 
     new SlashCommandBuilder()
         .setName("gifrespuestas")
@@ -1438,7 +1478,7 @@ const HELP_PAGES = [
         title: "🎮 Juegos y utilidades",
         description: [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
-            "`/akinator` Piensa en un personaje y responde hasta 20 preguntas para que el bot lo adivine.",
+            "`/akinator` Piensa en una persona, lugar, comida, película o personaje y responde hasta 30 preguntas.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
@@ -1696,6 +1736,13 @@ function chooseAkinatorQuestion(candidates, askedQuestions) {
 
     const availableQuestions = AKINATOR_QUESTIONS.filter(
         question => !askedQuestions.has(question.trait)
+            && (
+                !["male", "female"].includes(question.trait)
+                || candidates.every(character =>
+                    character.traits.includes("male")
+                    || character.traits.includes("female")
+                )
+            )
     );
     let bestBalance = Infinity;
     let bestQuestions = [];
@@ -1787,20 +1834,34 @@ function createAkinatorButtons(gameId, disabled = false, canGoBack = false) {
 
 function createAkinatorQuestionEmbed(question, candidates, askedCount) {
 
+    const categoryCounts = candidates.reduce((counts, character) => {
+        counts.set(character.category, (counts.get(character.category) || 0) + 1);
+        return counts;
+    }, new Map());
+    const likelyCategories = [...categoryCounts]
+        .sort((first, second) => second[1] - first[1])
+        .slice(0, 3)
+        .map(([category, count]) => `${category}: ${count}`)
+        .join("\n");
+
     return new EmbedBuilder()
         .setColor(0x7d3c98)
         .setTitle(`🔮 Akinator · Pregunta ${askedCount + 1}`)
         .setDescription(question.text)
         .addFields({
-            name: "Personajes posibles",
+            name: "Opciones posibles",
             value: `${candidates.length}`,
+            inline: true
+        }, {
+            name: "Categorías probables",
+            value: likelyCategories || "Varias",
             inline: true
         }, {
             name: "Respuestas",
             value: "Sí · No · Probablemente · Probablemente no · No sé"
         })
         .setFooter({
-            text: `Banco de ${AKINATOR_CHARACTERS.length} personajes · Anime, videojuegos, cómics, películas y series`
+            text: `Base local: ${AKINATOR_CHARACTERS.length} opciones · Máximo ${AKINATOR_MAX_QUESTIONS} preguntas`
         });
 }
 
@@ -1849,7 +1910,7 @@ function createAkinatorResultEmbed(character, questionCount, imageUrl) {
     const embed = new EmbedBuilder()
         .setColor(0x7d3c98)
         .setTitle("🔮 ¡Lo adiviné!")
-        .setDescription(`Estabas pensando en **${character.name}**.`)
+        .setDescription(`Estabas pensando en **${character.name}**.\n**Categoría:** ${character.category || "personaje ficticio"}`)
         .setFooter({ text: `Lo adiviné en ${questionCount} preguntas.` });
 
     if (imageUrl) embed.setImage(imageUrl);
@@ -2445,7 +2506,7 @@ client.on("interactionCreate", async interaction => {
 
         const gameMessage = await interaction.fetchReply();
         const collector = gameMessage.createMessageComponentCollector({
-            time: 180000,
+            time: 360000,
             filter: buttonInteraction =>
                 buttonInteraction.customId.startsWith(`akinator-${gameId}-`)
         });
