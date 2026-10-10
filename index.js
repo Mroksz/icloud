@@ -133,7 +133,6 @@ const ORACLE_ANSWERS = [
     "La respuesta es sí, con un 73% de confianza y 100% de dramatismo."
 ];
 const AKINATOR_MAX_QUESTIONS = 20;
-const AKINATOR_MIN_GUESSES = 12;
 const AKINATOR_CHARACTERS = [
     { name: "Goku", wiki: "Goku", traits: ["anime", "male", "alien", "powers", "martial-arts", "animated"] },
     { name: "Naruto Uzumaki", wiki: "Naruto Uzumaki", traits: ["anime", "male", "human", "powers", "ninja", "animated"] },
@@ -1354,6 +1353,8 @@ client.on("guildDelete", updateBotPresence);
 
 client.on("guildCreate", async guild => {
 
+    if (guild.id !== PERSONALITY_GUILD_ID) return;
+
     try {
         const botMember = await guild.members.fetchMe();
         const candidateChannels = [
@@ -1385,7 +1386,7 @@ client.on("guildCreate", async guild => {
 
 client.on("guildMemberAdd", async member => {
 
-    if (member.user.bot || member.guild.name.trim().toLowerCase() !== "fuck") return;
+    if (member.user.bot || member.guild.id !== PERSONALITY_GUILD_ID) return;
 
     try {
 
@@ -1478,15 +1479,25 @@ client.on("messageCreate", async message => {
 
 function rankAkinatorCharacters(answers) {
 
+    const answerScores = {
+        yes: [-2, 2],
+        no: [2, -2],
+        probably: [-1, 1],
+        probably_not: [1, -1]
+    };
     const ranked = AKINATOR_CHARACTERS.map(character => ({
         character,
-        score: [...answers].reduce((score, [trait, answer]) =>
-            score + (character.traits.includes(trait) === answer ? 1 : 0), 0)
+        score: [...answers].reduce((score, [trait, answer]) => {
+            const scores = answerScores[answer];
+            if (!scores) return score;
+
+            return score + scores[Number(character.traits.includes(trait))];
+        }, 0)
     }));
     const bestScore = Math.max(...ranked.map(candidate => candidate.score));
 
     return ranked
-        .filter(candidate => candidate.score === bestScore)
+        .filter(candidate => candidate.score >= bestScore - 2)
         .map(candidate => candidate.character);
 }
 
@@ -1518,6 +1529,31 @@ function chooseAkinatorQuestion(candidates, askedQuestions) {
     return pickRandomMessage(bestQuestions);
 }
 
+function recordAkinatorAnswer(state, trait, answer) {
+
+    const oppositeTraits = {
+        male: "female",
+        female: "male"
+    };
+    const oppositeTrait = oppositeTraits[trait];
+
+    state.askedQuestions.add(trait);
+    state.answers.set(trait, answer);
+
+    if (
+        oppositeTrait
+        && ["yes", "probably"].includes(answer)
+        && !state.answers.has(oppositeTrait)
+    ) {
+        state.askedQuestions.add(oppositeTrait);
+        state.answers.set(
+            oppositeTrait,
+            answer === "yes" ? "no" : "probably_not"
+        );
+    }
+
+}
+
 function createAkinatorButtons(gameId, disabled = false) {
 
     return [
@@ -1531,6 +1567,16 @@ function createAkinatorButtons(gameId, disabled = false) {
                 .setCustomId(`akinator-${gameId}-no`)
                 .setLabel("No")
                 .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled),
+            new ButtonBuilder()
+                .setCustomId(`akinator-${gameId}-probably`)
+                .setLabel("Probablemente")
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled),
+            new ButtonBuilder()
+                .setCustomId(`akinator-${gameId}-probably_not`)
+                .setLabel("Probablemente no")
+                .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled),
             new ButtonBuilder()
                 .setCustomId(`akinator-${gameId}-unknown`)
@@ -1551,6 +1597,9 @@ function createAkinatorQuestionEmbed(question, candidates, askedCount) {
             name: "Personajes posibles",
             value: `${candidates.length}`,
             inline: true
+        }, {
+            name: "Respuestas",
+            value: "Sí · No · Probablemente · Probablemente no · No sé"
         })
         .setFooter({
             text: `Banco de ${AKINATOR_CHARACTERS.length} personajes · Anime, videojuegos, cómics, películas y series`
@@ -2223,21 +2272,12 @@ client.on("interactionCreate", async interaction => {
                 await buttonInteraction.deferUpdate();
                 const answer = buttonInteraction.customId.split("-").at(-1);
 
-                state.askedQuestions.add(currentQuestion.trait);
                 state.questionCount++;
-
-                if (answer === "yes") {
-                    state.answers.set(currentQuestion.trait, true);
-                } else if (answer === "no") {
-                    state.answers.set(currentQuestion.trait, false);
-                }
+                recordAkinatorAnswer(state, currentQuestion.trait, answer);
 
                 candidates = rankAkinatorCharacters(state.answers);
-                const questionPool = state.questionCount < AKINATOR_MIN_GUESSES
-                    ? AKINATOR_CHARACTERS
-                    : candidates;
                 const nextQuestion = chooseAkinatorQuestion(
-                    questionPool,
+                    candidates,
                     state.askedQuestions
                 );
                 const fallbackQuestion = nextQuestion || (
