@@ -138,6 +138,7 @@ const ORACLE_ANSWERS = [
     "La respuesta es sí, con un 73% de confianza y 100% de dramatismo."
 ];
 const AKINATOR_MAX_QUESTIONS = 30;
+const AKINATOR_THINKING_TIME = 5 * 1000;
 const AKINATOR_BASE_CHARACTERS = [
     { name: "Goku", wiki: "Goku", traits: ["anime", "male", "alien", "powers", "martial-arts", "animated"] },
     { name: "Naruto Uzumaki", wiki: "Naruto Uzumaki", traits: ["anime", "male", "human", "powers", "ninja", "animated"] },
@@ -1792,7 +1793,13 @@ function recordAkinatorAnswer(state, trait, answer) {
 
 }
 
-function createAkinatorButtons(gameId, disabled = false, canGoBack = false) {
+function createAkinatorButtons(
+    gameId,
+    disabled = false,
+    canGoBack = false,
+    result = false,
+    finished = false
+) {
 
     return [
         new ActionRowBuilder().addComponents(
@@ -1827,9 +1834,40 @@ function createAkinatorButtons(gameId, disabled = false, canGoBack = false) {
                 .setCustomId(`akinator-${gameId}-back`)
                 .setLabel("← Retroceder")
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(!canGoBack)
+                .setDisabled(!canGoBack),
+            new ButtonBuilder()
+                .setCustomId(`akinator-${gameId}-restart`)
+                .setLabel("Volver a jugar")
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(!result),
+            new ButtonBuilder()
+                .setCustomId(`akinator-${gameId}-finish`)
+                .setLabel("Finalizar")
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(finished)
         )
     ];
+}
+
+function createAkinatorThinkingEmbed() {
+
+    return new EmbedBuilder()
+        .setColor(0x7d3c98)
+        .setTitle("🔮 Piensa en algo")
+        .setDescription(
+            `Elige en tu mente una opción de las categorías disponibles. Empezamos en **${AKINATOR_THINKING_TIME / 1000} segundos**.`
+        )
+        .setFooter({
+            text: "La partida está por comenzar."
+        });
+}
+
+function createAkinatorFinishedEmbed() {
+
+    return new EmbedBuilder()
+        .setColor(0x7d3c98)
+        .setTitle("🔮 Partida finalizada")
+        .setDescription("Gracias por jugar Akinator. Cuando quieras, inicia otra partida con `/akinator`.");
 }
 
 function createAkinatorQuestionEmbed(question, candidates, askedCount) {
@@ -2496,6 +2534,14 @@ client.on("interactionCreate", async interaction => {
         );
 
         await interaction.reply({
+            embeds: [createAkinatorThinkingEmbed()]
+        });
+
+        const gameMessage = await interaction.fetchReply();
+        await new Promise(resolve =>
+            setTimeout(resolve, AKINATOR_THINKING_TIME)
+        );
+        await gameMessage.edit({
             embeds: [createAkinatorQuestionEmbed(
                 currentQuestion,
                 candidates,
@@ -2503,8 +2549,6 @@ client.on("interactionCreate", async interaction => {
             )],
             components: createAkinatorButtons(gameId)
         });
-
-        const gameMessage = await interaction.fetchReply();
         const collector = gameMessage.createMessageComponentCollector({
             time: 360000,
             filter: buttonInteraction =>
@@ -2531,6 +2575,56 @@ client.on("interactionCreate", async interaction => {
             try {
                 await buttonInteraction.deferUpdate();
                 const answer = buttonInteraction.customId.split("-").at(-1);
+
+                if (answer === "finish") {
+                    collector.stop("finished");
+                    await gameMessage.edit({
+                        embeds: [createAkinatorFinishedEmbed()],
+                        components: createAkinatorButtons(
+                            gameId,
+                            true,
+                            false,
+                            false,
+                            true
+                        )
+                    });
+                    return;
+                }
+
+                if (answer === "restart") {
+                    state.answers.clear();
+                    state.askedQuestions.clear();
+                    state.questionCount = 0;
+                    state.history = [];
+                    candidates = rankAkinatorCharacters(state.answers);
+                    currentQuestion = chooseAkinatorQuestion(
+                        AKINATOR_CHARACTERS,
+                        state.askedQuestions
+                    );
+                    collector.resetTimer();
+                    await gameMessage.edit({
+                        embeds: [createAkinatorThinkingEmbed()],
+                        components: createAkinatorButtons(
+                            gameId,
+                            true,
+                            false,
+                            false,
+                            true
+                        )
+                    });
+                    await new Promise(resolve =>
+                        setTimeout(resolve, AKINATOR_THINKING_TIME)
+                    );
+                    await gameMessage.edit({
+                        embeds: [createAkinatorQuestionEmbed(
+                            currentQuestion,
+                            candidates,
+                            state.questionCount
+                        )],
+                        components: createAkinatorButtons(gameId)
+                    });
+                    return;
+                }
 
                 if (answer === "back") {
                     const previousState = state.history.pop();
@@ -2565,6 +2659,7 @@ client.on("interactionCreate", async interaction => {
                 });
                 state.questionCount++;
                 recordAkinatorAnswer(state, currentQuestion.trait, answer);
+                collector.resetTimer();
 
                 candidates = rankAkinatorCharacters(state.answers);
                 const nextQuestion = chooseAkinatorQuestion(
@@ -2594,7 +2689,8 @@ client.on("interactionCreate", async interaction => {
                         components: createAkinatorButtons(
                             gameId,
                             true,
-                            state.history.length > 0
+                            state.history.length > 0,
+                            true
                         )
                     });
                     return;
@@ -2619,7 +2715,13 @@ client.on("interactionCreate", async interaction => {
                 await gameMessage.edit({
                     content: "❌ Ocurrió un error al continuar Akinator. Inténtalo de nuevo con `/akinator`.",
                     embeds: [],
-                    components: createAkinatorButtons(gameId, true)
+                    components: createAkinatorButtons(
+                        gameId,
+                        true,
+                        false,
+                        false,
+                        true
+                    )
                 }).catch(editError => {
                     console.error("No pude mostrar el error de Akinator:", editError);
                 });
@@ -2631,7 +2733,11 @@ client.on("interactionCreate", async interaction => {
 
         collector.on("end", (_, reason) => {
 
-            if (reason === "guessed" || reason === "error") return;
+            if (
+                reason === "finished"
+                || reason === "guessed"
+                || reason === "error"
+            ) return;
 
             void gameMessage.edit({
                 embeds: [
@@ -2640,7 +2746,13 @@ client.on("interactionCreate", async interaction => {
                         .setTitle("🔮 Partida terminada")
                         .setDescription("Se acabó el tiempo. Inicia otra partida con `/akinator`.")
                 ],
-                components: createAkinatorButtons(gameId, true)
+                components: createAkinatorButtons(
+                    gameId,
+                    true,
+                    false,
+                    false,
+                    true
+                )
             }).catch(error => {
                 console.error("No pude cerrar la partida de Akinator:", error);
             });
