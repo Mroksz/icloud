@@ -1829,21 +1829,109 @@ client.on("guildMemberRemove", updateBotPresence);
 client.on("guildCreate", updateBotPresence);
 client.on("guildDelete", updateBotPresence);
 
+function createGuildWelcomeEmbed(guild) {
+
+    return new EmbedBuilder()
+        .setColor(0x7656d6)
+        .setTitle("✨ ¡Gracias por invitar a iCloud! ✨")
+        .setDescription(
+            `¡Hola, **${guild.name}**! Estoy listo para traer juegos y diversión a esta comunidad.\n\n` +
+            "Empieza con uno de estos comandos y usa **/help** para ver la lista completa."
+        )
+        .addFields({
+            name: "🎮 Comandos para empezar",
+            value: [
+                "```",
+                "COMANDO       │ ¿QUÉ HACE?",
+                "──────────────┼────────────────────────",
+                "/akinator     │ Adivina lo que imaginas",
+                "/misterio     │ Resuelve un caso con pistas",
+                "/gato         │ Juega tres en raya",
+                "/reto         │ Prueba un reto creativo",
+                "/help         │ Lista completa de comandos",
+                "```"
+            ].join("\n")
+        })
+        .setImage(BOT_PRESENTATION_IMAGE_URL)
+        .setFooter({ text: "iCloud · Diversión para toda la comunidad" });
+}
+
+async function logGuildJoin(guild) {
+
+    const channel = await client.channels.fetch(COMMAND_LOG_CHANNEL_ID);
+    if (!channel?.isTextBased() || typeof channel.send !== "function") {
+        throw new Error("El canal configurado para logs no admite mensajes.");
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(0x2ecc71)
+        .setTitle("➕ iCloud se unió a un servidor")
+        .setDescription(`**${guild.name}**`)
+        .addFields(
+            {
+                name: "Servidor",
+                value: `\`${guild.id}\``,
+                inline: true
+            },
+            {
+                name: "Miembros",
+                value: `${guild.memberCount.toLocaleString("es-MX")}`,
+                inline: true
+            },
+            {
+                name: "Propietario",
+                value: guild.ownerId ? `<@${guild.ownerId}>` : "No disponible",
+                inline: true
+            }
+        )
+        .setTimestamp();
+    const icon = guild.iconURL({ size: 256 });
+
+    if (icon) embed.setThumbnail(icon);
+
+    await channel.send({
+        embeds: [embed],
+        allowedMentions: { parse: [] }
+    });
+}
+
 client.on("guildCreate", async guild => {
 
-    if (guild.id !== PERSONALITY_GUILD_ID) return;
+    if (!client.isReady()) return;
+
+    try {
+        await rest.put(
+            Routes.applicationGuildCommands(client.user.id, guild.id),
+            { body: commands }
+        );
+    } catch (error) {
+        console.error(`No pude registrar comandos en el nuevo servidor ${guild.name}:`, error);
+    }
+
+    try {
+        await logGuildJoin(guild);
+    } catch (error) {
+        console.error(`No pude registrar la entrada al servidor ${guild.name} en logs:`, error);
+    }
 
     try {
         const botMember = await guild.members.fetchMe();
         const candidateChannels = [
             guild.systemChannel,
-            ...guild.channels.cache.filter(channel => channel.isTextBased()).values()
+            ...guild.channels.cache
+                .filter(channel =>
+                    channel.type === ChannelType.GuildText
+                    || channel.type === ChannelType.GuildAnnouncement
+                )
+                .sort((first, second) => first.rawPosition - second.rawPosition)
+                .values()
         ].filter(Boolean);
         const welcomeChannel = candidateChannels.find(channel =>
             channel.isTextBased()
             && channel.permissionsFor(botMember)?.has([
                 PermissionsBitField.Flags.ViewChannel,
-                PermissionsBitField.Flags.SendMessages
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.EmbedLinks
             ])
         );
 
@@ -1853,7 +1941,7 @@ client.on("guildCreate", async guild => {
         }
 
         await welcomeChannel.send({
-            content: `👋 ¡Hola, **${guild.name}**! Soy **iCloud**, el bot del servidor. Usa \`/help\` para descubrir lo que puedo hacer. ¡Gracias por invitarme!`,
+            embeds: [createGuildWelcomeEmbed(guild)],
             allowedMentions: { parse: [] }
         });
     } catch (error) {
