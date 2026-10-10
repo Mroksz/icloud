@@ -139,11 +139,11 @@ const AKINATOR_CHARACTERS = [
     { name: "Monkey D. Luffy", wiki: "Monkey D. Luffy", traits: ["anime", "male", "human", "powers", "pirate", "animated"] },
     { name: "Saitama", wiki: "Saitama (One-Punch Man)", traits: ["anime", "male", "human", "powers", "martial-arts", "animated"] },
     { name: "Tanjiro Kamado", wiki: "Tanjiro Kamado", traits: ["anime", "male", "human", "sword", "animated"] },
-    { name: "Pikachu", wiki: "Pikachu", traits: ["game", "nintendo", "animal", "yellow", "powers", "animated"] },
-    { name: "Mario", wiki: "Mario", traits: ["game", "nintendo", "male", "human", "plumber", "animated"] },
-    { name: "Sonic", wiki: "Sonic the Hedgehog", traits: ["game", "animal", "blue", "powers", "animated"] },
-    { name: "Link", wiki: "Link (The Legend of Zelda)", traits: ["game", "nintendo", "male", "human", "sword", "animated"] },
-    { name: "Zelda", wiki: "Princess Zelda", traits: ["game", "nintendo", "female", "human", "powers", "sword", "animated"] },
+    { name: "Pikachu", wiki: "Pikachu", traits: ["game", "nintendo", "animal", "yellow", "powers", "animated", "pokemon"] },
+    { name: "Mario", wiki: "Mario", traits: ["game", "nintendo", "male", "human", "plumber", "animated", "mario"] },
+    { name: "Sonic", wiki: "Sonic the Hedgehog", traits: ["game", "animal", "blue", "powers", "animated", "sonic"] },
+    { name: "Link", wiki: "Link (The Legend of Zelda)", traits: ["game", "nintendo", "male", "human", "sword", "animated", "zelda"] },
+    { name: "Zelda", wiki: "Princess Zelda", traits: ["game", "nintendo", "female", "human", "powers", "sword", "animated", "zelda"] },
     { name: "Batman", wiki: "Batman", traits: ["comic", "hero", "male", "human", "mask", "weapon", "animated"] },
     { name: "Superman", wiki: "Superman", traits: ["comic", "hero", "male", "alien", "powers", "animated"] },
     { name: "Spider-Man", wiki: "Spider-Man", traits: ["comic", "hero", "male", "human", "mask", "powers", "animated"] },
@@ -167,10 +167,159 @@ const AKINATOR_CHARACTERS = [
     { name: "Wonder Woman", wiki: "Wonder Woman", traits: ["comic", "hero", "female", "human", "powers", "weapon", "sword"] },
     { name: "Joker", wiki: "Joker (character)", traits: ["comic", "villain", "male", "human"] },
     { name: "Wednesday Addams", wiki: "Wednesday Addams", traits: ["tv", "female", "human", "powers"] },
-    { name: "Groot", wiki: "Groot", traits: ["comic", "hero", "male", "animal", "powers", "space"] },
-    { name: "Stitch", wiki: "Stitch (Lilo & Stitch)", traits: ["movie", "animal", "blue", "powers", "space", "animated"] },
-    { name: "Mewtwo", wiki: "Mewtwo", traits: ["game", "nintendo", "animal", "powers", "animated"] },
-    { name: "Capitán América", wiki: "Captain America", traits: ["comic", "hero", "male", "human", "weapon"] }
+    { name: "Groot", wiki: "Groot", traits: ["comic", "hero", "male", "animal", "powers", "space", "marvel"] },
+    { name: "Stitch", wiki: "Stitch (Lilo & Stitch)", traits: ["movie", "animal", "blue", "powers", "space", "animated", "disney"] },
+    { name: "Mewtwo", wiki: "Mewtwo", traits: ["game", "nintendo", "animal", "powers", "animated", "pokemon"] },
+    { name: "Capitán América", wiki: "Captain America", traits: ["comic", "hero", "male", "human", "weapon", "marvel"] },
+    { name: "Vegeta", wiki: "Vegeta", traits: ["anime", "male", "alien", "powers", "martial-arts", "animated", "dragon-ball"] },
+    { name: "Gohan", wiki: "Gohan", traits: ["anime", "male", "human", "alien", "powers", "martial-arts", "animated", "dragon-ball"] },
+    { name: "Bulma", wiki: "Bulma", traits: ["anime", "female", "human", "animated", "dragon-ball"] },
+    { name: "Frieza", wiki: "Frieza", traits: ["anime", "male", "alien", "villain", "powers", "animated", "dragon-ball"] },
+    { name: "Broly", wiki: "Broly", traits: ["anime", "male", "alien", "powers", "martial-arts", "animated", "dragon-ball"] },
+    { name: "Sakura Haruno", wiki: "Sakura Haruno", traits: ["anime", "female", "human", "powers", "ninja", "animated", "naruto"] },
+    { name: "Sasuke Uchiha", wiki: "Sasuke Uchiha", traits: ["anime", "male", "human", "powers", "ninja", "sword", "animated", "naruto"] },
+    { name: "Kakashi Hatake", wiki: "Kakashi Hatake", traits: ["anime", "male", "human", "powers", "ninja", "mask", "animated", "naruto"] },
+    { name: "Itachi Uchiha", wiki: "Itachi Uchiha", traits: ["anime", "male", "human", "powers", "ninja", "animated", "naruto"] },
+    { name: "Madara Uchiha", wiki: "Madara Uchiha", traits: ["anime", "male", "human", "villain", "powers", "ninja", "animated", "naruto"] },
+    { name: "Roronoa Zoro", wiki: "Roronoa Zoro", traits: ["anime", "male", "human", "sword", "pirate", "animated", "one-piece"] },
+    { name: "Nami", wiki: "Nami (One Piece)", traits: ["anime", "female", "human", "pirate", "animated", "one-piece"] },
+    { name: "Sanji", wiki: "Sanji (One Piece)", traits: ["anime", "male", "human", "pirate", "martial-arts", "animated", "one-piece"] },
+    { name: "Tony Tony Chopper", wiki: "Tony Tony Chopper", traits: ["anime", "male", "animal", "powers", "pirate", "animated", "one-piece"] },
+    { name: "Portgas D. Ace", wiki: "Portgas D. Ace", traits: ["anime", "male", "human", "powers", "pirate", "animated", "one-piece"] },
+    { name: "Shanks", wiki: "Shanks (One Piece)", traits: ["anime", "male", "human", "powers", "pirate", "sword", "animated", "one-piece"] },
+    { name: "Nezuko Kamado", wiki: "Nezuko Kamado", traits: ["anime", "female", "human", "powers", "sword", "animated", "demon-slayer"] },
+    { name: "Zenitsu Agatsuma", wiki: "Zenitsu Agatsuma", traits: ["anime", "male", "human", "sword", "animated", "demon-slayer"] },
+    { name: "Inosuke Hashibira", wiki: "Inosuke Hashibira", traits: ["anime", "male", "human", "animal", "sword", "mask", "animated", "demon-slayer"] },
+    { name: "Kyojuro Rengoku", wiki: "Kyojuro Rengoku", traits: ["anime", "male", "human", "sword", "animated", "demon-slayer"] },
+    { name: "Gojo Satoru", wiki: "Satoru Gojo", traits: ["anime", "male", "human", "powers", "glasses", "animated", "jujutsu-kaisen"] },
+    { name: "Yuji Itadori", wiki: "Yuji Itadori", traits: ["anime", "male", "human", "powers", "martial-arts", "animated", "jujutsu-kaisen"] },
+    { name: "Sukuna", wiki: "Ryomen Sukuna", traits: ["anime", "male", "villain", "powers", "animated", "jujutsu-kaisen"] },
+    { name: "Eren Yeager", wiki: "Eren Yeager", traits: ["anime", "male", "human", "powers", "animated", "attack-on-titan"] },
+    { name: "Mikasa Ackerman", wiki: "Mikasa Ackerman", traits: ["anime", "female", "human", "weapon", "animated", "attack-on-titan"] },
+    { name: "Light Yagami", wiki: "Light Yagami", traits: ["anime", "male", "human", "villain", "glasses", "animated", "death-note"] },
+    { name: "L (Death Note)", wiki: "L (character)", traits: ["anime", "male", "human", "glasses", "animated", "death-note"] },
+    { name: "Sailor Moon", wiki: "Sailor Moon (character)", traits: ["anime", "female", "human", "powers", "animated", "sailor-moon"] },
+    { name: "Izuku Midoriya", wiki: "Izuku Midoriya", traits: ["anime", "male", "human", "hero", "powers", "animated", "my-hero-academia"] },
+    { name: "Ochaco Uraraka", wiki: "Ochaco Uraraka", traits: ["anime", "female", "human", "hero", "powers", "animated", "my-hero-academia"] },
+    { name: "Ichigo Kurosaki", wiki: "Ichigo Kurosaki", traits: ["anime", "male", "human", "powers", "sword", "animated", "bleach"] },
+    { name: "Anya Forger", wiki: "Anya Forger", traits: ["anime", "female", "human", "powers", "animated", "spy-x-family"] },
+    { name: "Rem", wiki: "Rem (Re:Zero)", traits: ["anime", "female", "human", "powers", "animated", "re-zero"] },
+    { name: "Asuka Langley Soryu", wiki: "Asuka Langley Soryu", traits: ["anime", "female", "human", "animated", "neon-genesis-evangelion"] },
+    { name: "Totoro", wiki: "Totoro", traits: ["movie", "animal", "powers", "animated", "studio-ghibli"] },
+    { name: "Kiki", wiki: "Kiki's Delivery Service", traits: ["movie", "female", "human", "wizard", "animated", "studio-ghibli"] },
+    { name: "Ponyo", wiki: "Ponyo", traits: ["movie", "female", "animal", "powers", "underwater", "animated", "studio-ghibli"] },
+    { name: "Doraemon", wiki: "Doraemon", traits: ["anime", "male", "animal", "robot", "blue", "animated"] },
+    { name: "Inuyasha", wiki: "Inuyasha", traits: ["anime", "male", "animal", "powers", "sword", "animated"] },
+    { name: "Donkey Kong", wiki: "Donkey Kong (character)", traits: ["game", "nintendo", "animal", "animated"] },
+    { name: "Princess Peach", wiki: "Princess Peach", traits: ["game", "nintendo", "female", "human", "princess", "animated", "mario"] },
+    { name: "Bowser", wiki: "Bowser (character)", traits: ["game", "nintendo", "male", "animal", "villain", "animated", "mario"] },
+    { name: "Wario", wiki: "Wario", traits: ["game", "nintendo", "male", "human", "animated", "mario"] },
+    { name: "Toad", wiki: "Toad (Nintendo)", traits: ["game", "nintendo", "male", "animated", "mario"] },
+    { name: "Shadow the Hedgehog", wiki: "Shadow the Hedgehog", traits: ["game", "male", "animal", "powers", "animated", "sonic"] },
+    { name: "Tails", wiki: "Miles Tails Prower", traits: ["game", "male", "animal", "animated", "sonic"] },
+    { name: "Knuckles the Echidna", wiki: "Knuckles the Echidna", traits: ["game", "male", "animal", "powers", "animated", "sonic"] },
+    { name: "Samus Aran", wiki: "Samus Aran", traits: ["game", "nintendo", "female", "human", "mask", "weapon", "space"] },
+    { name: "Kirby", wiki: "Kirby (character)", traits: ["game", "nintendo", "animal", "pink", "powers", "animated"] },
+    { name: "Ganondorf", wiki: "Ganondorf", traits: ["game", "nintendo", "male", "villain", "powers", "sword", "animated", "zelda"] },
+    { name: "Solid Snake", wiki: "Solid Snake", traits: ["game", "male", "human", "mask", "weapon"] },
+    { name: "Cloud Strife", wiki: "Cloud Strife", traits: ["game", "male", "human", "sword", "animated"] },
+    { name: "Sephiroth", wiki: "Sephiroth (Final Fantasy)", traits: ["game", "male", "villain", "powers", "sword", "animated"] },
+    { name: "Aloy", wiki: "Aloy", traits: ["game", "female", "human", "weapon"] },
+    { name: "Geralt de Rivia", wiki: "Geralt of Rivia", traits: ["game", "male", "human", "powers", "sword", "wizard"] },
+    { name: "Jill Valentine", wiki: "Jill Valentine", traits: ["game", "female", "human", "weapon", "horror"] },
+    { name: "Leon S. Kennedy", wiki: "Leon S. Kennedy", traits: ["game", "male", "human", "weapon", "horror"] },
+    { name: "Creeper", wiki: "Creeper (Minecraft)", traits: ["game", "animal", "villain", "green", "animated", "minecraft"] },
+    { name: "Enderman", wiki: "Enderman", traits: ["game", "animal", "villain", "powers", "space", "minecraft"] },
+    { name: "Lloyd", wiki: "Lloyd Garmadon", traits: ["tv", "male", "human", "powers", "ninja", "animated", "ninjago"] },
+    { name: "Optimus Prime", wiki: "Optimus Prime", traits: ["movie", "male", "robot", "hero", "weapon", "space", "transformers"] },
+    { name: "Bumblebee", wiki: "Bumblebee (Transformers)", traits: ["movie", "male", "robot", "hero", "yellow", "transformers"] },
+    { name: "Buzz Lightyear", wiki: "Buzz Lightyear", traits: ["movie", "male", "human", "hero", "space", "animated", "toy-story", "disney"] },
+    { name: "Woody", wiki: "Woody (Toy Story)", traits: ["movie", "male", "human", "hero", "animated", "toy-story", "disney"] },
+    { name: "Rayo McQueen", wiki: "Lightning McQueen", traits: ["movie", "male", "vehicle", "red", "animated", "cars", "disney"] },
+    { name: "Mickey Mouse", wiki: "Mickey Mouse", traits: ["tv", "male", "animal", "black", "animated", "disney"] },
+    { name: "Donald Duck", wiki: "Donald Duck", traits: ["tv", "male", "animal", "animated", "disney"] },
+    { name: "Minnie Mouse", wiki: "Minnie Mouse", traits: ["tv", "female", "animal", "animated", "disney"] },
+    { name: "Rapunzel", wiki: "Rapunzel (Tangled)", traits: ["movie", "female", "human", "princess", "powers", "animated", "disney"] },
+    { name: "Moana", wiki: "Moana (Disney character)", traits: ["movie", "female", "human", "hero", "animated", "disney"] },
+    { name: "Mulan", wiki: "Mulan (Disney character)", traits: ["movie", "female", "human", "weapon", "animated", "disney"] },
+    { name: "Simba", wiki: "Simba", traits: ["movie", "male", "animal", "king", "animated", "disney"] },
+    { name: "Genio", wiki: "Genie (Aladdin)", traits: ["movie", "male", "powers", "blue", "animated", "disney"] },
+    { name: "WALL-E", wiki: "WALL-E (character)", traits: ["movie", "robot", "male", "space", "animated", "pixar"] },
+    { name: "Alegría", wiki: "Joy (Inside Out)", traits: ["movie", "female", "powers", "animated", "pixar"] },
+    { name: "Gru", wiki: "Gru (Despicable Me)", traits: ["movie", "male", "human", "villain", "animated"] },
+    { name: "Minion", wiki: "Minions (Despicable Me)", traits: ["movie", "animal", "yellow", "animated"] },
+    { name: "Po", wiki: "Po (Kung Fu Panda)", traits: ["movie", "male", "animal", "martial-arts", "animated"] },
+    { name: "Hipo", wiki: "Hiccup Horrendous Haddock III", traits: ["movie", "male", "human", "animated"] },
+    { name: "Chimuelo", wiki: "Toothless (How to Train Your Dragon)", traits: ["movie", "animal", "black", "powers", "animated"] },
+    { name: "Fiona", wiki: "Princess Fiona", traits: ["movie", "female", "animal", "princess", "animated"] },
+    { name: "Burro", wiki: "Donkey (Shrek)", traits: ["movie", "male", "animal", "animated"] },
+    { name: "Jack Sparrow", wiki: "Jack Sparrow", traits: ["movie", "male", "human", "pirate", "weapon"] },
+    { name: "Indiana Jones", wiki: "Indiana Jones", traits: ["movie", "male", "human", "hero", "weapon"] },
+    { name: "James Bond", wiki: "James Bond", traits: ["movie", "male", "human", "weapon"] },
+    { name: "John Wick", wiki: "John Wick", traits: ["movie", "male", "human", "weapon"] },
+    { name: "Rocky Balboa", wiki: "Rocky Balboa", traits: ["movie", "male", "human", "martial-arts"] },
+    { name: "Terminator", wiki: "Terminator (character)", traits: ["movie", "male", "robot", "villain", "weapon"] },
+    { name: "The Joker (DC)", wiki: "Joker (character)", traits: ["movie", "comic", "male", "human", "villain", "dc"] },
+    { name: "Harley Quinn", wiki: "Harley Quinn", traits: ["comic", "female", "human", "villain", "weapon", "dc"] },
+    { name: "Flash", wiki: "Flash (DC Comics character)", traits: ["comic", "male", "human", "hero", "powers", "dc"] },
+    { name: "Aquaman", wiki: "Aquaman", traits: ["comic", "male", "human", "hero", "powers", "underwater", "dc"] },
+    { name: "Green Lantern", wiki: "Green Lantern", traits: ["comic", "male", "human", "hero", "powers", "space", "dc"] },
+    { name: "Thor", wiki: "Thor (Marvel Comics)", traits: ["comic", "male", "hero", "powers", "weapon", "marvel"] },
+    { name: "Hulk", wiki: "Hulk", traits: ["comic", "male", "hero", "powers", "green", "marvel"] },
+    { name: "Black Widow", wiki: "Black Widow (Natasha Romanova)", traits: ["comic", "female", "human", "hero", "weapon", "marvel"] },
+    { name: "Black Panther", wiki: "Black Panther (character)", traits: ["comic", "male", "human", "hero", "mask", "marvel"] },
+    { name: "Loki", wiki: "Loki (Marvel Comics)", traits: ["comic", "male", "villain", "powers", "wizard", "marvel"] },
+    { name: "Thanos", wiki: "Thanos", traits: ["comic", "male", "villain", "alien", "powers", "space", "marvel"] },
+    { name: "Wolverine", wiki: "Wolverine (character)", traits: ["comic", "male", "hero", "powers", "claws", "marvel"] },
+    { name: "Doctor Strange", wiki: "Doctor Strange", traits: ["comic", "male", "human", "hero", "wizard", "powers", "marvel"] },
+    { name: "Scarlet Witch", wiki: "Scarlet Witch", traits: ["comic", "female", "hero", "wizard", "powers", "marvel"] },
+    { name: "Jinx", wiki: "Jinx (League of Legends)", traits: ["game", "female", "human", "weapon", "animated"] },
+    { name: "Eleven", wiki: "Eleven (Stranger Things)", traits: ["tv", "female", "human", "powers"] },
+    { name: "Dustin Henderson", wiki: "Dustin Henderson", traits: ["tv", "male", "human"] },
+    { name: "Walter White", wiki: "Walter White (Breaking Bad)", traits: ["tv", "male", "human", "villain", "glasses"] },
+    { name: "Jesse Pinkman", wiki: "Jesse Pinkman", traits: ["tv", "male", "human"] },
+    { name: "Daenerys Targaryen", wiki: "Daenerys Targaryen", traits: ["tv", "female", "human", "queen", "powers"] },
+    { name: "Jon Snow", wiki: "Jon Snow (character)", traits: ["tv", "male", "human", "sword"] },
+    { name: "Arya Stark", wiki: "Arya Stark", traits: ["tv", "female", "human", "sword"] },
+    { name: "Sherlock Holmes", wiki: "Sherlock Holmes", traits: ["tv", "male", "human", "detective"] },
+    { name: "Dr. House", wiki: "Gregory House", traits: ["tv", "male", "human"] },
+    { name: "Ted Lasso", wiki: "Ted Lasso", traits: ["tv", "male", "human"] },
+    { name: "Morty Smith", wiki: "Morty Smith", traits: ["tv", "male", "human", "space", "animated"] },
+    { name: "Stewie Griffin", wiki: "Stewie Griffin", traits: ["tv", "male", "human", "animated"] },
+    { name: "Peter Griffin", wiki: "Peter Griffin", traits: ["tv", "male", "human", "animated"] },
+    { name: "Bart Simpson", wiki: "Bart Simpson", traits: ["tv", "male", "human", "animated"] },
+    { name: "Lisa Simpson", wiki: "Lisa Simpson", traits: ["tv", "female", "human", "animated"] },
+    { name: "Marge Simpson", wiki: "Marge Simpson", traits: ["tv", "female", "human", "animated"] },
+    { name: "Tom", wiki: "Tom Cat", traits: ["tv", "male", "animal", "animated"] },
+    { name: "Jerry", wiki: "Jerry Mouse", traits: ["tv", "male", "animal", "animated"] },
+    { name: "Pato Lucas", wiki: "Daffy Duck", traits: ["tv", "male", "animal", "animated"] },
+    { name: "Bugs Bunny", wiki: "Bugs Bunny", traits: ["tv", "male", "animal", "animated"] },
+    { name: "Peppa Pig", wiki: "Peppa Pig", traits: ["tv", "female", "animal", "animated"] },
+    { name: "Bluey", wiki: "Bluey (2018 TV series)", traits: ["tv", "female", "animal", "blue", "animated"] },
+    { name: "Aang", wiki: "Aang", traits: ["tv", "male", "human", "powers", "animated", "avatar"] },
+    { name: "Zuko", wiki: "Zuko", traits: ["tv", "male", "human", "powers", "animated", "avatar"] },
+    { name: "Katara", wiki: "Katara", traits: ["tv", "female", "human", "powers", "animated", "avatar"] },
+    { name: "Darth Maul", wiki: "Darth Maul", traits: ["movie", "male", "villain", "powers", "sword", "space", "star-wars"] },
+    { name: "Yoda", wiki: "Yoda", traits: ["movie", "male", "alien", "powers", "wizard", "space", "star-wars"] },
+    { name: "Grogu", wiki: "Grogu", traits: ["tv", "male", "alien", "powers", "space", "star-wars"] },
+    { name: "Obi-Wan Kenobi", wiki: "Obi-Wan Kenobi", traits: ["movie", "male", "human", "hero", "powers", "sword", "space", "star-wars"] },
+    { name: "Leia Organa", wiki: "Leia Organa", traits: ["movie", "female", "human", "hero", "weapon", "space", "star-wars"] },
+    { name: "Luke Skywalker", wiki: "Luke Skywalker", traits: ["movie", "male", "human", "hero", "powers", "sword", "space", "star-wars"] },
+    { name: "Hermione Granger", wiki: "Hermione Granger", traits: ["movie", "female", "human", "wizard", "powers", "glasses", "harry-potter"] },
+    { name: "Ron Weasley", wiki: "Ron Weasley", traits: ["movie", "male", "human", "wizard", "powers", "harry-potter"] },
+    { name: "Lord Voldemort", wiki: "Lord Voldemort", traits: ["movie", "male", "human", "villain", "wizard", "powers", "harry-potter"] },
+    { name: "Dobby", wiki: "Dobby (Harry Potter)", traits: ["movie", "male", "animal", "wizard", "powers", "harry-potter"] },
+    { name: "Katniss Everdeen", wiki: "Katniss Everdeen", traits: ["movie", "female", "human", "hero", "weapon"] },
+    { name: "Pennywise", wiki: "Pennywise", traits: ["movie", "villain", "powers", "horror"] },
+    { name: "Chucky", wiki: "Chucky (Child's Play)", traits: ["movie", "male", "villain", "toy", "horror"] },
+    { name: "Jason Voorhees", wiki: "Jason Voorhees", traits: ["movie", "male", "villain", "mask", "weapon", "horror"] },
+    { name: "Freddy Krueger", wiki: "Freddy Krueger", traits: ["movie", "male", "villain", "powers", "weapon", "horror"] },
+    { name: "Godzilla", wiki: "Godzilla", traits: ["movie", "animal", "powers", "underwater"] },
+    { name: "King Kong", wiki: "King Kong", traits: ["movie", "animal", "powers"] },
+    { name: "Barbie", wiki: "Barbie", traits: ["movie", "female", "human", "toy"] },
+    { name: "Ken", wiki: "Ken (doll)", traits: ["movie", "male", "human", "toy"] },
+    { name: "Mr. Bean", wiki: "Mr. Bean", traits: ["tv", "male", "human"] },
+    { name: "Among Us Crewmate", wiki: "Among Us", traits: ["game", "alien", "animated"] }
 ];
 const AKINATOR_QUESTIONS = [
     { trait: "anime", text: "¿Tu personaje viene del anime o manga?" },
@@ -201,7 +350,49 @@ const AKINATOR_QUESTIONS = [
     { trait: "glasses", text: "¿Usa gafas?" },
     { trait: "horror", text: "¿Viene de un juego o historia de terror?" },
     { trait: "animated", text: "¿Es un personaje animado?" },
-    { trait: "martial-arts", text: "¿Es experto en artes marciales?" }
+    { trait: "martial-arts", text: "¿Es experto en artes marciales?" },
+    { trait: "robot", text: "¿Es un robot o una máquina con personalidad?" },
+    { trait: "vehicle", text: "¿Es un vehículo con personalidad propia?" },
+    { trait: "princess", text: "¿Es una princesa?" },
+    { trait: "king", text: "¿Es un rey?" },
+    { trait: "queen", text: "¿Es una reina?" },
+    { trait: "detective", text: "¿Es detective o investigador?" },
+    { trait: "toy", text: "¿Es un juguete o muñeco?" },
+    { trait: "pink", text: "¿Su color más característico es el rosa?" },
+    { trait: "green", text: "¿Su color más característico es el verde?" },
+    { trait: "red", text: "¿Su color más característico es el rojo?" },
+    { trait: "black", text: "¿Su color más característico es el negro?" },
+    { trait: "claws", text: "¿Tiene garras como arma o característica?" },
+    { trait: "marvel", text: "¿Pertenece al universo Marvel?" },
+    { trait: "dc", text: "¿Pertenece al universo DC?" },
+    { trait: "disney", text: "¿Aparece en una película o serie de Disney?" },
+    { trait: "pixar", text: "¿Aparece en una película de Pixar?" },
+    { trait: "toy-story", text: "¿Es de Toy Story?" },
+    { trait: "cars", text: "¿Es del universo de Cars?" },
+    { trait: "transformers", text: "¿Es un Transformer?" },
+    { trait: "minecraft", text: "¿Es del universo de Minecraft?" },
+    { trait: "mario", text: "¿Es del universo de Mario?" },
+    { trait: "sonic", text: "¿Es del universo de Sonic?" },
+    { trait: "zelda", text: "¿Es del universo de The Legend of Zelda?" },
+    { trait: "pokemon", text: "¿Es del universo de Pokémon?" },
+    { trait: "dragon-ball", text: "¿Es del universo de Dragon Ball?" },
+    { trait: "naruto", text: "¿Es del universo de Naruto?" },
+    { trait: "one-piece", text: "¿Es del universo de One Piece?" },
+    { trait: "demon-slayer", text: "¿Es del universo de Demon Slayer?" },
+    { trait: "jujutsu-kaisen", text: "¿Es del universo de Jujutsu Kaisen?" },
+    { trait: "attack-on-titan", text: "¿Es del universo de Attack on Titan?" },
+    { trait: "death-note", text: "¿Es del universo de Death Note?" },
+    { trait: "sailor-moon", text: "¿Es del universo de Sailor Moon?" },
+    { trait: "my-hero-academia", text: "¿Es del universo de My Hero Academia?" },
+    { trait: "bleach", text: "¿Es del universo de Bleach?" },
+    { trait: "spy-x-family", text: "¿Es del universo de Spy × Family?" },
+    { trait: "re-zero", text: "¿Es del universo de Re:Zero?" },
+    { trait: "neon-genesis-evangelion", text: "¿Es del universo de Evangelion?" },
+    { trait: "studio-ghibli", text: "¿Aparece en una película de Studio Ghibli?" },
+    { trait: "ninjago", text: "¿Es del universo de Ninjago?" },
+    { trait: "avatar", text: "¿Es del universo de Avatar: La leyenda de Aang?" },
+    { trait: "star-wars", text: "¿Es del universo de Star Wars?" },
+    { trait: "harry-potter", text: "¿Es del universo de Harry Potter?" }
 ];
 
 function loadEconomyData() {
@@ -1554,7 +1745,7 @@ function recordAkinatorAnswer(state, trait, answer) {
 
 }
 
-function createAkinatorButtons(gameId, disabled = false) {
+function createAkinatorButtons(gameId, disabled = false, canGoBack = false) {
 
     return [
         new ActionRowBuilder().addComponents(
@@ -1583,6 +1774,13 @@ function createAkinatorButtons(gameId, disabled = false) {
                 .setLabel("No sé")
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled)
+        ),
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`akinator-${gameId}-back`)
+                .setLabel("← Retroceder")
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(!canGoBack)
         )
     ];
 }
@@ -2227,7 +2425,8 @@ client.on("interactionCreate", async interaction => {
         const state = {
             answers: new Map(),
             askedQuestions: new Set(),
-            questionCount: 0
+            questionCount: 0,
+            history: []
         };
         let candidates = rankAkinatorCharacters(state.answers);
         let currentQuestion = chooseAkinatorQuestion(
@@ -2272,6 +2471,37 @@ client.on("interactionCreate", async interaction => {
                 await buttonInteraction.deferUpdate();
                 const answer = buttonInteraction.customId.split("-").at(-1);
 
+                if (answer === "back") {
+                    const previousState = state.history.pop();
+                    if (!previousState) return;
+
+                    state.answers = previousState.answers;
+                    state.askedQuestions = previousState.askedQuestions;
+                    state.questionCount = previousState.questionCount;
+                    currentQuestion = previousState.currentQuestion;
+                    candidates = rankAkinatorCharacters(state.answers);
+
+                    await gameMessage.edit({
+                        embeds: [createAkinatorQuestionEmbed(
+                            currentQuestion,
+                            candidates,
+                            state.questionCount
+                        )],
+                        components: createAkinatorButtons(
+                            gameId,
+                            false,
+                            state.history.length > 0
+                        )
+                    });
+                    return;
+                }
+
+                state.history.push({
+                    answers: new Map(state.answers),
+                    askedQuestions: new Set(state.askedQuestions),
+                    questionCount: state.questionCount,
+                    currentQuestion
+                });
                 state.questionCount++;
                 recordAkinatorAnswer(state, currentQuestion.trait, answer);
 
@@ -2292,7 +2522,6 @@ client.on("interactionCreate", async interaction => {
                     || !fallbackQuestion;
 
                 if (shouldGuess) {
-                    collector.stop("guessed");
                     const character = pickRandomMessage(candidates);
                     const imageUrl = await fetchAkinatorCharacterImage(character);
                     await gameMessage.edit({
@@ -2301,7 +2530,11 @@ client.on("interactionCreate", async interaction => {
                             state.questionCount,
                             imageUrl
                         )],
-                        components: createAkinatorButtons(gameId, true)
+                        components: createAkinatorButtons(
+                            gameId,
+                            true,
+                            state.history.length > 0
+                        )
                     });
                     return;
                 }
@@ -2313,7 +2546,11 @@ client.on("interactionCreate", async interaction => {
                         candidates,
                         state.questionCount
                     )],
-                    components: createAkinatorButtons(gameId)
+                    components: createAkinatorButtons(
+                        gameId,
+                        false,
+                        state.history.length > 0
+                    )
                 });
             } catch (error) {
                 console.error("Falló una ronda de Akinator:", error);
