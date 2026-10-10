@@ -439,43 +439,80 @@ const AKINATOR_QUESTIONS = [
 ];
 
 const WIKIDATA_PROPERTIES_BY_CATEGORY = {
-    sport: ["P27", "P19", "P106", "P166", "P800"],
-    actor: ["P27", "P19", "P106", "P166", "P800"],
-    philosopher: ["P27", "P19", "P106", "P166", "P800", "P69"],
-    ruler: ["P27", "P19", "P106", "P166", "P800"],
-    scientist: ["P27", "P19", "P106", "P166", "P800", "P69"],
-    youtuber: ["P27", "P19", "P106", "P166", "P800"],
-    city: ["P17", "P131", "P571"],
-    food: ["P495", "P279", "P186"],
-    film: ["P495", "P136", "P57", "P161"],
-    fiction: ["P1080", "P1441", "P170"],
-    game: ["P1080", "P1441", "P170"]
+    sport: ["P19", "P20", "P27", "P39", "P69", "P101", "P102", "P106", "P166", "P569", "P570", "P800", "P937", "P1412"],
+    actor: ["P19", "P20", "P27", "P39", "P69", "P101", "P102", "P106", "P166", "P569", "P570", "P800", "P937", "P1412"],
+    philosopher: ["P19", "P20", "P27", "P39", "P69", "P101", "P102", "P106", "P166", "P569", "P570", "P800", "P937", "P1412"],
+    ruler: ["P19", "P20", "P27", "P39", "P69", "P101", "P102", "P106", "P166", "P569", "P570", "P800", "P937", "P1412"],
+    scientist: ["P19", "P20", "P27", "P39", "P69", "P101", "P102", "P106", "P166", "P569", "P570", "P800", "P937", "P1412"],
+    youtuber: ["P19", "P20", "P27", "P39", "P69", "P101", "P102", "P106", "P166", "P569", "P570", "P800", "P937", "P1412"],
+    city: ["P17", "P36", "P131", "P571"],
+    food: ["P495", "P279", "P186", "P2576"],
+    film: ["P495", "P136", "P57", "P58", "P86", "P161", "P179", "P364", "P840"],
+    fiction: ["P19", "P39", "P106", "P1080", "P1441", "P166", "P170"],
+    game: ["P19", "P39", "P106", "P1080", "P1441", "P166", "P170"]
 };
 const WIKIDATA_PROPERTY_QUESTIONS = {
-    P17: ["¿Está ubicada en {value}?", "¿Se encuentra en {value}?"],
-    P19: ["¿Nació en {value}?", "¿Su lugar de nacimiento fue {value}?"],
-    P27: ["¿Tiene ciudadanía de {value}?", "¿Es ciudadano/a de {value}?"],
-    P69: ["¿Estudió en {value}?", "¿Asistió a {value}?"],
-    P106: ["¿Se le conoce por su ocupación como {value}?", "¿Su profesión es {value}?"],
-    P1080: ["¿Pertenece al universo de ficción {value}?", "¿Su historia forma parte de {value}?"],
-    P131: ["¿Pertenece administrativamente a {value}?", "¿Está dentro de {value}?"],
-    P136: ["¿Su género es {value}?", "¿Se clasifica dentro del género {value}?"],
-    P1441: ["¿Aparece en la obra {value}?", "¿Forma parte de {value}?"],
-    P161: ["¿Participa {value} en su reparto?", "¿Actúa {value} en esta película?"],
-    P166: ["¿Recibió el reconocimiento {value}?", "¿Ganó o recibió {value}?"],
-    P170: ["¿Fue creado/a por {value}?", "¿Su creador/a es {value}?"],
-    P186: ["¿Se elabora con {value}?", "¿Uno de sus ingredientes o materiales es {value}?"],
-    P279: ["¿Es un tipo de {value}?", "¿Pertenece al grupo de {value}?"],
-    P495: ["¿Se originó en {value}?", "¿Su país de origen es {value}?"],
+    P17: ["¿Se encuentra en {value}?", "¿Está situada en {value}?", "¿Pertenece al país de {value}?"],
+    P19: ["¿Nació en {value}?", "¿Su lugar de nacimiento fue {value}?", "¿Sus orígenes están en {value}?"],
+    P20: ["¿Murió en {value}?", "¿El lugar de su fallecimiento fue {value}?"],
+    P27: ["¿Tiene ciudadanía de {value}?", "¿Es ciudadano/a de {value}?", "¿Se le asocia con {value} por su nacionalidad?"],
+    P36: ["¿Es la capital de {value}?", "¿Es sede de gobierno de {value}?"],
+    P39: ["¿Ocupó el cargo de {value}?", "¿Tuvo un puesto oficial como {value}?", "¿Desempeñó la función de {value}?"],
+    P57: ["¿La dirigió {value}?", "¿Su director o directora fue {value}?"],
+    P58: ["¿El guion fue escrito por {value}?", "¿Participó {value} como guionista?"],
+    P69: ["¿Estudió en {value}?", "¿Asistió a {value}?", "¿Se formó en {value}?"],
+    P86: ["¿Su música estuvo a cargo de {value}?", "¿La banda sonora fue compuesta por {value}?"],
+    P101: ["¿Su campo principal es {value}?", "¿Se especializó en {value}?", "¿Trabajó principalmente en {value}?"],
+    P102: ["¿Estuvo afiliado/a al partido {value}?", "¿Formó parte de {value}?"],
+    P106: ["¿Se le conoce por su ocupación como {value}?", "¿Su profesión es {value}?", "¿Trabajó como {value}?"],
+    P1080: ["¿Pertenece al universo de ficción {value}?", "¿Su historia forma parte de {value}?", "¿Fue creado/a para el mundo de {value}?"],
+    P131: ["¿Pertenece administrativamente a {value}?", "¿Está dentro de {value}?", "¿Forma parte del territorio de {value}?"],
+    P136: ["¿Su género es {value}?", "¿Se clasifica dentro del género {value}?", "¿Pertenece al género cinematográfico {value}?"],
+    P1441: ["¿Aparece en la obra {value}?", "¿Forma parte de {value}?", "¿Se presenta en {value}?"],
+    P161: ["¿Participa {value} en su reparto?", "¿Actúa {value} en esta película?", "¿Comparte elenco con {value}?"],
+    P166: ["¿Recibió el reconocimiento {value}?", "¿Ganó o recibió {value}?", "¿Fue premiado/a con {value}?"],
+    P170: ["¿Fue creado/a por {value}?", "¿Su creador/a es {value}?", "¿La idea original pertenece a {value}?"],
+    P179: ["¿Forma parte de la saga {value}?", "¿Pertenece a la serie de películas {value}?"],
+    P186: ["¿Se elabora con {value}?", "¿Uno de sus ingredientes o materiales es {value}?", "¿Contiene {value}?"],
+    P2576: ["¿Pertenece a la cocina {value}?", "¿Es típico/a de la gastronomía {value}?"],
+    P279: ["¿Es un tipo de {value}?", "¿Pertenece al grupo de {value}?", "¿Se clasifica como {value}?"],
+    P364: ["¿Su idioma original es {value}?", "¿Se filmó originalmente en {value}?"],
+    P495: ["¿Se originó en {value}?", "¿Su país de origen es {value}?", "¿Nació como obra o producto de {value}?"],
+    P569: ["¿Nació en el año {value}?", "¿Su nacimiento fue en {value}?"],
+    P570: ["¿Murió en el año {value}?", "¿Su fallecimiento fue en {value}?"],
     P571: ["¿Se fundó o estableció en {value}?", "¿Su origen se remonta a {value}?"],
-    P800: ["¿Se le reconoce por la obra {value}?", "¿Es conocido/a por {value}?"]
+    P800: ["¿Se le reconoce por la obra {value}?", "¿Es conocido/a por {value}?", "¿Su trabajo destacado incluye {value}?"],
+    P840: ["¿La historia ocurre en {value}?", "¿Su escenario principal es {value}?"],
+    P937: ["¿Trabajó en {value}?", "¿Desarrolló allí parte de su carrera?", "¿Ejerció su profesión en {value}?"],
+    P1412: ["¿Hablaba o utilizaba {value}?", "¿Se comunicaba en {value}?", "¿Conocía el idioma {value}?"]
 };
 const WIKIDATA_FACT_CACHE = new Map();
 const WIKIDATA_FACT_CACHE_TTL = 24 * 60 * 60 * 1000;
+const WIKIDATA_FACT_QUERY_LIMIT = 2400;
 
 function normalizeAkinatorName(name) {
 
     return name.toLocaleLowerCase("es").trim();
+}
+
+function formatAkinatorWikidataValue(propertyId, rawValue) {
+
+    if (typeof rawValue !== "string") return null;
+
+    const value = rawValue.trim();
+    if (!value) return null;
+
+    if (["P569", "P570", "P571"].includes(propertyId)) {
+        const dateMatch = value.match(/^([+-])(\d{1,6})-/);
+        if (dateMatch) {
+            const year = Number(dateMatch[2]);
+            return dateMatch[1] === "-"
+                ? `${year} a. C.`
+                : `${year}`;
+        }
+    }
+
+    return value.length <= 100 ? value : null;
 }
 
 async function loadAkinatorWikidataFacts(characters) {
@@ -486,99 +523,127 @@ async function loadAkinatorWikidataFacts(characters) {
         return !cached || now - cached.cachedAt >= WIKIDATA_FACT_CACHE_TTL;
     });
 
-    if (uncachedCharacters.length > 0) {
-        const propertyIds = [...new Set(uncachedCharacters.flatMap(character =>
-            WIKIDATA_PROPERTIES_BY_CATEGORY[character.dataCategory] || []
-        ))];
+    const batches = [];
+    for (let index = 0; index < uncachedCharacters.length; index += 80) {
+        batches.push(uncachedCharacters.slice(index, index + 80));
+    }
 
-        if (propertyIds.length > 0) {
-            const names = [...new Set(uncachedCharacters.map(character =>
-                character.name
-            ))];
-            const nameValues = names.flatMap(name =>
-                ["en", "es"].map(language =>
-                    `${JSON.stringify(name)}@${language}`
-                )
-            ).join(" ");
-            const query = `
-                SELECT ?name ?property ?valueLabel WHERE {
-                    VALUES ?name { ${nameValues} }
-                    ?item rdfs:label ?name .
-                    FILTER(LANG(?name) = "en" || LANG(?name) = "es")
-                    VALUES ?property { ${propertyIds.map(id => `wdt:${id}`).join(" ")} }
-                    ?item ?property ?value .
-                    SERVICE wikibase:label {
-                        bd:serviceParam wikibase:language "es,en".
-                    }
-                }
-                LIMIT 1200
-            `;
-            const response = await fetch(
-                "https://query.wikidata.org/sparql",
-                {
-                    method: "POST",
-                    headers: {
-                        Accept: "application/sparql-results+json",
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "User-Agent": "SoymrDiscordBot/1.0 (Akinator)"
-                    },
-                    body: new URLSearchParams({ query }).toString(),
-                    signal: AbortSignal.timeout(8000)
-                }
-            );
+    let nextBatchIndex = 0;
+    const workers = Array.from(
+        { length: Math.min(2, batches.length) },
+        async () => {
+            while (nextBatchIndex < batches.length) {
+                const batch = batches[nextBatchIndex++];
+                const propertyIds = [...new Set(batch.flatMap(character =>
+                    WIKIDATA_PROPERTIES_BY_CATEGORY[character.dataCategory] || []
+                ))];
 
-            if (!response.ok) {
-                throw new Error(`Wikidata respondió con HTTP ${response.status}.`);
-            }
+                if (propertyIds.length === 0) continue;
 
-            const result = await response.json();
-            const factsByName = new Map();
-
-            for (const binding of result.results.bindings) {
-                const name = normalizeAkinatorName(binding.name.value);
-                const propertyMatch = binding.property.value.match(/P\d+$/);
-                const value = binding.valueLabel?.value?.trim();
-
-                if (!propertyMatch || !value) continue;
-
-                if (!factsByName.has(name)) factsByName.set(name, []);
-                const facts = factsByName.get(name);
-                const propertyId = propertyMatch[0];
-
-                if (
-                    facts.filter(fact => fact.propertyId === propertyId).length >= 4
-                    || facts.some(fact =>
-                        fact.propertyId === propertyId
-                        && fact.value.toLocaleLowerCase("es")
-                            === value.toLocaleLowerCase("es")
+                const names = [...new Set(batch.map(character => character.name))];
+                const nameValues = names.flatMap(name =>
+                    ["en", "es"].map(language =>
+                        `${JSON.stringify(name)}@${language}`
                     )
-                ) continue;
-
-                facts.push({ propertyId, value });
-            }
-
-            for (const character of uncachedCharacters) {
-                WIKIDATA_FACT_CACHE.set(
-                    normalizeAkinatorName(character.name),
+                ).join(" ");
+                const query = `
+                    SELECT ?name ?property ?value ?valueLabel WHERE {
+                        VALUES ?name { ${nameValues} }
+                        ?item rdfs:label ?name .
+                        FILTER(LANG(?name) = "en" || LANG(?name) = "es")
+                        VALUES ?property { ${propertyIds.map(id => `wdt:${id}`).join(" ")} }
+                        ?item ?property ?value .
+                        SERVICE wikibase:label {
+                            bd:serviceParam wikibase:language "es,en".
+                        }
+                    }
+                    LIMIT ${WIKIDATA_FACT_QUERY_LIMIT}
+                `;
+                const response = await fetch(
+                    "https://query.wikidata.org/sparql",
                     {
-                        cachedAt: now,
-                        facts: factsByName.get(
-                            normalizeAkinatorName(character.name)
-                        ) || []
+                        method: "POST",
+                        headers: {
+                            Accept: "application/sparql-results+json",
+                            "Content-Type": "application/x-www-form-urlencoded",
+                            "User-Agent": "SoymrDiscordBot/1.0 (Akinator)"
+                        },
+                        body: new URLSearchParams({ query }).toString(),
+                        signal: AbortSignal.timeout(10000)
                     }
                 );
+
+                if (!response.ok) {
+                    throw new Error(`Wikidata respondió con HTTP ${response.status}.`);
+                }
+
+                const result = await response.json();
+                const factsByName = new Map();
+                const countsByName = new Map();
+                const matchedNames = new Set();
+
+                for (const binding of result.results.bindings) {
+                    const name = normalizeAkinatorName(binding.name.value);
+                    matchedNames.add(name);
+                    const propertyMatch = binding.property.value.match(/P\d+$/);
+                    const value = formatAkinatorWikidataValue(
+                        propertyMatch?.[0],
+                        binding.valueLabel?.value || binding.value?.value
+                    );
+
+                    if (!propertyMatch || !value) continue;
+
+                    if (!factsByName.has(name)) factsByName.set(name, []);
+                    const facts = factsByName.get(name);
+                    const propertyId = propertyMatch[0];
+                    const propertyCountKey = `${name}:${propertyId}`;
+                    const propertyCount = countsByName.get(propertyCountKey) || 0;
+
+                    if (
+                        propertyCount >= 6
+                        || facts.some(fact =>
+                            fact.propertyId === propertyId
+                            && fact.value.toLocaleLowerCase("es")
+                                === value.toLocaleLowerCase("es")
+                        )
+                    ) continue;
+
+                    facts.push({ propertyId, value });
+                    countsByName.set(propertyCountKey, propertyCount + 1);
+                }
+
+                for (const character of batch) {
+                    const name = normalizeAkinatorName(character.name);
+                    const completeProperties = result.results.bindings.length
+                        < WIKIDATA_FACT_QUERY_LIMIT
+                        && matchedNames.has(name)
+                        ? (WIKIDATA_PROPERTIES_BY_CATEGORY[character.dataCategory] || [])
+                            .filter(propertyId =>
+                                (countsByName.get(`${name}:${propertyId}`) || 0) < 6
+                            )
+                        : [];
+
+                    WIKIDATA_FACT_CACHE.set(name, {
+                        cachedAt: now,
+                        facts: factsByName.get(name) || [],
+                        completeProperties
+                    });
+                }
             }
         }
-    }
+    );
+
+    await Promise.all(workers);
 
     const questionsByTrait = new Map();
 
     for (const character of characters) {
         const cached = WIKIDATA_FACT_CACHE.get(normalizeAkinatorName(character.name));
-        character.knownFactProperties = new Set();
+        character.knownFactProperties = new Set(
+            cached?.completeProperties || []
+        );
 
         for (const fact of cached?.facts || []) {
-            character.knownFactProperties.add(fact.propertyId);
             const trait = `wd:${fact.propertyId}:${fact.value.toLocaleLowerCase("es")}`;
             character.traits.push(trait);
 
@@ -1924,8 +1989,7 @@ function chooseAkinatorQuestion(
                 )
             )
     );
-    let bestBalance = Infinity;
-    let bestQuestions = [];
+    const scoredQuestions = [];
 
     for (const question of availableQuestions) {
         const relevantCandidates = question.factProperty
@@ -1943,18 +2007,30 @@ function chooseAkinatorQuestion(
             || relevantCandidates.length < 2
         ) continue;
 
-        const balance = Math.abs(relevantCandidates.length - 2 * yesCount)
-            + (candidates.length - relevantCandidates.length);
+        const yesProbability = yesCount / relevantCandidates.length;
+        const noProbability = 1 - yesProbability;
+        const entropy = -(
+            yesProbability * Math.log2(yesProbability)
+            + noProbability * Math.log2(noProbability)
+        );
+        const informationGain = entropy
+            * (relevantCandidates.length / candidates.length);
 
-        if (balance < bestBalance) {
-            bestBalance = balance;
-            bestQuestions = [question];
-        } else if (balance === bestBalance) {
-            bestQuestions.push(question);
-        }
+        scoredQuestions.push({ question, informationGain });
     }
 
-    return pickRandomMessage(bestQuestions);
+    if (scoredQuestions.length === 0) return null;
+
+    const bestInformationGain = Math.max(
+        ...scoredQuestions.map(candidate => candidate.informationGain)
+    );
+    const variedQuestions = scoredQuestions
+        .filter(candidate =>
+            bestInformationGain - candidate.informationGain <= 0.04
+        )
+        .map(candidate => candidate.question);
+
+    return pickRandomMessage(variedQuestions);
 }
 
 function recordAkinatorAnswer(state, trait, answer) {
@@ -2099,7 +2175,7 @@ function createAkinatorQuestionEmbed(
         });
 }
 
-async function fetchAkinatorCharacterImage(character) {
+async function fetchAkinatorCharacterDetails(character) {
 
     let lastError;
 
@@ -2126,20 +2202,39 @@ async function fetchAkinatorCharacterImage(character) {
             const imageUrl = originalImage?.toLowerCase().endsWith(".svg")
                 ? thumbnail
                 : originalImage || thumbnail;
+            const rawDescription = (
+                summary.description
+                || summary.extract
+                || ""
+            );
+            const description = typeof rawDescription === "string"
+                ? rawDescription.replace(/\s+/g, " ").trim()
+                : "";
+            const visibleDescription = description
+                ? description.slice(0, 280).trimEnd()
+                    + (description.length > 280 ? "…" : "")
+                : null;
 
-            if (imageUrl) return imageUrl;
+            if (imageUrl || visibleDescription) {
+                return {
+                    imageUrl: imageUrl || null,
+                    description: visibleDescription
+                };
+            }
 
-            lastError = new Error(`No encontré una imagen para ${character.name} en Wikipedia (${language}).`);
+            lastError = new Error(
+                `Wikipedia no proporcionó una imagen ni una descripción para ${character.name} (${language}).`
+            );
         } catch (error) {
             lastError = error;
         }
     }
 
-    console.error(`No pude obtener la imagen de ${character.name}:`, lastError);
-    return null;
+    console.error(`No pude obtener información de ${character.name}:`, lastError);
+    return { imageUrl: null, description: null };
 }
 
-function createAkinatorResultEmbed(character, questionCount, imageUrl) {
+function createAkinatorResultEmbed(character, questionCount, details = {}) {
 
     const embed = new EmbedBuilder()
         .setColor(0x7d3c98)
@@ -2147,7 +2242,14 @@ function createAkinatorResultEmbed(character, questionCount, imageUrl) {
         .setDescription(`Estabas pensando en **${character.name}**.\n**Categoría:** ${character.category || "personaje ficticio"}`)
         .setFooter({ text: `Lo adiviné en ${questionCount} preguntas.` });
 
-    if (imageUrl) embed.setImage(imageUrl);
+    if (details.description) {
+        embed.addFields({
+            name: "Dato del personaje",
+            value: details.description
+        });
+    }
+
+    if (details.imageUrl) embed.setImage(details.imageUrl);
 
     return embed;
 }
@@ -2896,12 +2998,12 @@ client.on("interactionCreate", async interaction => {
 
                 if (shouldGuess) {
                     const character = pickRandomMessage(candidates);
-                    const imageUrl = await fetchAkinatorCharacterImage(character);
+                    const details = await fetchAkinatorCharacterDetails(character);
                     await gameMessage.edit({
                         embeds: [createAkinatorResultEmbed(
                             character,
                             state.questionCount,
-                            imageUrl
+                            details
                         )],
                         components: createAkinatorButtons(
                             gameId,
