@@ -74,18 +74,6 @@ const FUNNY_MESSAGES = [
     "Hoy voy lento, pero con una confianza que no está respaldada por los hechos."
 ];
 
-// Tiempo mínimo entre mensajes
-const MESSAGE_COOLDOWN = 5000;
-
-// Cuántas infracciones antes de timeout
-const MAX_WARNINGS = 3;
-
-// Duración del timeout
-const TIMEOUT_DURATION = 60 * 1000;
-
-// Máximo de mensajes iguales consecutivos
-const MAX_DUPLICATE_MESSAGES = 3;
-
 const ECONOMY_FILE = path.join(__dirname, "economy.json");
 const ROLE_ASSIGNMENTS_FILE = path.join(__dirname, "role_assignments.json");
 const CONNECTED_CHANNELS_FILE = path.join(__dirname, "connected_channels.json");
@@ -788,14 +776,6 @@ const client = new Client({
     ]
 });
 
-// ===============================
-// MEMORIA DEL ANTI-SPAM
-// ===============================
-
-const userCooldowns = new Map();
-const userWarnings = new Map();
-const userLastMessages = new Map();
-
 const BOT_REPLY_GIF_URLS = [
     "https://tenor.com/view/andrew-r-personality-likes-about-self-cv-gif-15418064",
     "https://klipy.com/gifs/clown-9",
@@ -954,16 +934,6 @@ const commands = [
     new SlashCommandBuilder()
         .setName("ping")
         .setDescription("Comprueba si el bot está funcionando."),
-
-    new SlashCommandBuilder()
-        .setName("8ball")
-        .setDescription("Consulta la bola mágica y descubre la probabilidad.")
-        .addStringOption(option =>
-            option
-                .setName("pregunta")
-                .setDescription("La pregunta que quieres hacerle a la bola mágica.")
-                .setRequired(true)
-        ),
 
     new SlashCommandBuilder()
         .setName("ppt")
@@ -1254,7 +1224,6 @@ const HELP_PAGES = [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
             "`/akinator` Piensa en un personaje y responde con los botones para que el bot lo adivine.",
             "`/ppt [oponente]` Juega piedra, papel o tijera contra el bot o una persona.",
-            "`/8ball pregunta` Consulta una respuesta y su probabilidad.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
@@ -1453,10 +1422,6 @@ client.on("guildMemberAdd", async member => {
 
 });
 
-// ===============================
-// ANTI-SPAM
-// ===============================
-
 client.on("messageCreate", async message => {
 
     // Ignorar bots
@@ -1506,175 +1471,6 @@ client.on("messageCreate", async message => {
 
         recordChatMessage(message);
         return;
-    }
-
-    const userId = message.author.id;
-
-    // =================================
-    // COOLDOWN DE 5 SEGUNDOS
-    // =================================
-
-    const now = Date.now();
-
-    const lastMessage = userCooldowns.get(userId);
-
-    if (lastMessage) {
-
-        const difference = now - lastMessage;
-
-        if (difference < MESSAGE_COOLDOWN) {
-
-            // Eliminar mensaje
-            try {
-
-                await message.delete();
-
-            } catch (error) {
-
-                console.log("No pude eliminar el mensaje.");
-
-            }
-
-            // Añadir advertencia
-            const warnings =
-                (userWarnings.get(userId) || 0) + 1;
-
-            userWarnings.set(userId, warnings);
-
-            // Tiempo restante
-            const remaining =
-                Math.ceil((MESSAGE_COOLDOWN - difference) / 1000);
-
-            try {
-
-                const warningMessage = await message.channel.send(
-                    `${message.author}, espera **${remaining} segundos** antes de enviar otro mensaje. ⚠️`
-                );
-
-                setTimeout(() => {
-
-                    warningMessage.delete().catch(() => {});
-
-                }, 5000);
-
-            } catch (error) {}
-
-            // =================================
-            // TIMEOUT
-            // =================================
-
-            if (warnings >= MAX_WARNINGS) {
-
-                try {
-
-                    await message.member.timeout(
-                        TIMEOUT_DURATION,
-                        "Anti-spam automático"
-                    );
-
-                    const timeoutMessage =
-                        await message.channel.send(
-                            `${message.author} fue silenciado durante 1 minuto por spam. 🔇`
-                        );
-
-                    setTimeout(() => {
-
-                        timeoutMessage.delete().catch(() => {});
-
-                    }, 5000);
-
-                    // Reiniciar advertencias
-                    userWarnings.delete(userId);
-
-                } catch (error) {
-
-                    console.log(
-                        "No pude aplicar timeout:",
-                        error.message
-                    );
-
-                }
-
-            }
-
-            return;
-        }
-
-    }
-
-    userCooldowns.set(userId, now);
-
-    // =================================
-    // MENSAJES REPETIDOS
-    // =================================
-
-    const lastMessageData =
-        userLastMessages.get(userId);
-
-    if (lastMessageData) {
-
-        if (
-            lastMessageData.content.toLowerCase() ===
-            message.content.toLowerCase()
-        ) {
-
-            lastMessageData.count++;
-
-        } else {
-
-            lastMessageData.content = message.content;
-            lastMessageData.count = 1;
-
-        }
-
-    } else {
-
-        userLastMessages.set(userId, {
-
-            content: message.content,
-            count: 1
-
-        });
-
-    }
-
-    const duplicateData =
-        userLastMessages.get(userId);
-
-    if (duplicateData.count >= MAX_DUPLICATE_MESSAGES) {
-
-        try {
-
-            await message.delete();
-
-            await message.member.timeout(
-                TIMEOUT_DURATION,
-                "Spam de mensajes repetidos"
-            );
-
-            const warning =
-                await message.channel.send(
-                    `${message.author} fue silenciado por enviar mensajes repetidos. 🔇`
-                );
-
-            setTimeout(() => {
-
-                warning.delete().catch(() => {});
-
-            }, 5000);
-
-        } catch (error) {
-
-            console.log(
-                "Error con anti-spam:",
-                error.message
-            );
-
-        }
-
-        duplicateData.count = 0;
-        return;
-
     }
 
     recordChatMessage(message);
@@ -2513,27 +2309,6 @@ client.on("interactionCreate", async interaction => {
         });
 
         return;
-    }
-
-    if (interaction.commandName === "8ball") {
-
-        const question = interaction.options.getString("pregunta", true);
-        const probability = Math.floor(Math.random() * 101);
-        const answer = probability < 20
-            ? "Las señales dicen que no."
-            : probability < 40
-                ? "Parece poco probable."
-                : probability < 60
-                    ? "La bola no puede decidirse todavía."
-                    : probability < 80
-                        ? "Todo apunta a que sí."
-                        : "Es casi seguro que sí.";
-
-        return interaction.reply({
-            content: `**Pregunta:** ${question}\n**Probabilidad:** ${probability}%\n${answer}`,
-            allowedMentions: { parse: [] }
-        });
-
     }
 
     // =================================
