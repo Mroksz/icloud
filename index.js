@@ -36,6 +36,12 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const CHAT_CHANNEL_ID = "1530770440992194643";
 const COMMAND_LOG_CHANNEL_ID = "1557996473151651861";
 const COMMUNITY_CHANNEL_ID = "1558002369848016966";
+const BOT_PRESENTATION_CHANNEL_ID = "1558385288877842453";
+const BOT_PRESENTATION_FILE = path.join(__dirname, "PRESENTACION-BOT.md");
+const BOT_PRESENTATION_PUBLISHED_FILE = path.join(
+    __dirname,
+    "presentation_published.json"
+);
 const FUNNY_ROLE_ID = "1531550671285784770";
 const TWITCH_STREAM_URL = "https://www.twitch.tv/soyja_20";
 const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
@@ -1324,7 +1330,7 @@ function getBotReplyType(message) {
 // COMANDOS
 // ===============================
 
-const commands = [
+let commands = [
 
     new SlashCommandBuilder()
         .setName("saldo")
@@ -1586,15 +1592,24 @@ const commands = [
                 .setDescription("Canal de texto que se conectará al chat comunitario.")
                 .setRequired(true)
                 .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        )
+        ),
 
-].map(command => command.toJSON());
+    new SlashCommandBuilder()
+        .setName("presentacion")
+        .setDescription("Publica la presentación del bot una sola vez.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+
+].map(command => command.toJSON()).filter(command =>
+    command.name !== "presentacion"
+        || !fs.existsSync(BOT_PRESENTATION_PUBLISHED_FILE)
+);
 
 // ===============================
 // REGISTRAR COMANDOS
 // ===============================
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
+let presentationPublishing = false;
 
 async function registerCommands() {
 
@@ -1626,7 +1641,13 @@ async function registerCommands() {
             const registeredCommands = await rest.get(scope.listRoute);
 
             for (const command of registeredCommands) {
-                if (!["8ball", "ppt", "personajes483"].includes(command.name)) {
+                if (
+                    !["8ball", "ppt", "personajes483"].includes(command.name)
+                    && !(
+                        command.name === "presentacion"
+                        && fs.existsSync(BOT_PRESENTATION_PUBLISHED_FILE)
+                    )
+                ) {
                     continue;
                 }
 
@@ -2586,6 +2607,144 @@ client.on("interactionCreate", async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     void logCommandUsage(interaction);
+
+    if (interaction.commandName === "presentacion") {
+
+        if (!interaction.guild) {
+            return interaction.reply({
+                content: "❌ Usa este comando dentro del servidor que contiene el canal de presentación.",
+                ephemeral: true
+            });
+        }
+
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({
+                content: "❌ Solo los administradores pueden publicar la presentación.",
+                ephemeral: true
+            });
+        }
+
+        if (fs.existsSync(BOT_PRESENTATION_PUBLISHED_FILE)) {
+            return interaction.reply({
+                content: "✅ La presentación ya se publicó y este comando está desactivado.",
+                ephemeral: true
+            });
+        }
+
+        if (presentationPublishing) {
+            return interaction.reply({
+                content: "⏳ Ya se está publicando la presentación.",
+                ephemeral: true
+            });
+        }
+
+        presentationPublishing = true;
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const channel = await client.channels.fetch(
+                BOT_PRESENTATION_CHANNEL_ID
+            );
+            if (
+                !channel?.isTextBased()
+                || typeof channel.send !== "function"
+                || channel.guildId !== interaction.guildId
+            ) {
+                throw new Error(
+                    "El canal de presentación no existe, no admite mensajes o pertenece a otro servidor."
+                );
+            }
+
+            const presentation = fs.readFileSync(
+                BOT_PRESENTATION_FILE,
+                "utf8"
+            );
+            const posts = [...presentation.matchAll(
+                /```text\s*([\s\S]*?)\s*```/g
+            )].map(match => match[1].trim());
+
+            if (
+                posts.length !== 2
+                || posts.some(post => post.length > 2000)
+            ) {
+                throw new Error(
+                    "La plantilla debe contener exactamente dos mensajes de hasta 2,000 caracteres."
+                );
+            }
+
+            for (const post of posts) {
+                await channel.send({
+                    content: post,
+                    allowedMentions: { parse: [] }
+                });
+            }
+
+            const temporaryMarker = `${BOT_PRESENTATION_PUBLISHED_FILE}.tmp`;
+            fs.writeFileSync(
+                temporaryMarker,
+                JSON.stringify({
+                    publishedAt: new Date().toISOString(),
+                    channelId: BOT_PRESENTATION_CHANNEL_ID
+                }),
+                "utf8"
+            );
+            fs.renameSync(temporaryMarker, BOT_PRESENTATION_PUBLISHED_FILE);
+
+            commands = commands.filter(command =>
+                command.name !== "presentacion"
+            );
+
+            let commandRemoved = true;
+            try {
+                await Promise.all(
+                    [...client.guilds.cache.values()].map(guild =>
+                        rest.put(
+                            Routes.applicationGuildCommands(
+                                client.user.id,
+                                guild.id
+                            ),
+                            { body: commands }
+                        )
+                    )
+                );
+
+                const globalCommands = await rest.get(
+                    Routes.applicationCommands(client.user.id)
+                );
+                await Promise.all(
+                    globalCommands
+                        .filter(command => command.name === "presentacion")
+                        .map(command =>
+                            rest.delete(
+                                Routes.applicationCommand(
+                                    client.user.id,
+                                    command.id
+                                )
+                            )
+                        )
+                );
+            } catch (error) {
+                commandRemoved = false;
+                console.error(
+                    "La presentación se publicó, pero no pude eliminar el comando inmediatamente:",
+                    error
+                );
+            }
+
+            return interaction.editReply(
+                commandRemoved
+                    ? `✅ ¡Presentación publicada en <#${BOT_PRESENTATION_CHANNEL_ID}>! El comando de un solo uso ya fue retirado y no se volverá a registrar.`
+                    : `✅ ¡Presentación publicada en <#${BOT_PRESENTATION_CHANNEL_ID}>! Guardé el uso para que el comando no vuelva a registrarse; su eliminación en Discord se completará al reiniciar el bot.`
+            );
+        } catch (error) {
+            console.error("No pude publicar la presentación del bot:", error);
+            return interaction.editReply(
+                "❌ No pude completar la publicación. Revisa el canal, los permisos del bot y la plantilla; el comando seguirá disponible para reintentar."
+            );
+        } finally {
+            presentationPublishing = false;
+        }
+    }
 
     if (await handleConnectChannelCommand(interaction)) return;
 
