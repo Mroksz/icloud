@@ -175,6 +175,30 @@ const VILLAIN_WEAKNESSES = [
     "un chiste malo contado con mucha confianza",
     "una oferta de dos por uno"
 ];
+const JOKES = [
+    "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!",
+    "¿Cuál es el colmo de un jardinero? Que siempre lo dejen plantado.",
+    "¿Qué le dijo un techo a otro? Techo de menos.",
+    "¿Por qué el libro de matemáticas estaba triste? Porque tenía demasiados problemas.",
+    "¿Qué hace una computadora cuando tiene frío? Cierra Windows.",
+    "¿Cómo se despiden los químicos? Ácido un placer.",
+    "¿Qué le dijo una impresora a otra? ¿Esa hoja es tuya o es impresión mía?",
+    "¿Cuál es el café más peligroso? El ex-preso.",
+    "¿Qué hace un pez mago? Nada por aquí, nada por allá.",
+    "¿Por qué la escoba estaba feliz? Porque iba barriendo en la vida.",
+    "¿Qué le dijo el cero al ocho? ¡Qué bonito cinturón!",
+    "¿Cómo se llama el campeón de buceo japonés? Tokofondo.",
+    "¿Qué hace una vaca con los ojos cerrados? Leche concentrada.",
+    "¿Cuál es el animal más antiguo? La cebra, porque está en blanco y negro.",
+    "¿Qué le dice una iguana a su hermana gemela? Somos iguanitas.",
+    "¿Por qué el tomate se puso rojo? Porque vio a la ensalada desnuda.",
+    "¿Qué hace un lápiz en una fiesta? Saca punta al ambiente.",
+    "¿Cuál es el último animal que subió al arca? El del-fin.",
+    "¿Qué le dijo una pared a otra? Nos vemos en la esquina.",
+    "¿Por qué fue el ordenador al médico? Porque tenía un virus.",
+    "¿Qué hace una caja en el gimnasio? ¡Caja fuerte!",
+    "¿Qué le dijo el mar a la playa? Nada, solo hizo una ola."
+];
 const ORACLE_OPENERS = [
     "Las estrellas consultaron el chat y dicen:",
     "Mi bola mágica hizo una pausa dramática y responde:",
@@ -779,6 +803,14 @@ function loadGuildSettings() {
             || !settings.users
             || typeof settings.users !== "object"
             || Array.isArray(settings.users)
+            || (settings.counter !== undefined && (
+                !settings.counter
+                || typeof settings.counter !== "object"
+                || Array.isArray(settings.counter)
+                || !(settings.counter.channelId === null || /^\d+$/.test(settings.counter.channelId))
+                || !Number.isSafeInteger(settings.counter.value)
+                || settings.counter.value < 0
+            ))
             || Object.entries(settings.users).some(([userId, stats]) =>
                 !/^\d+$/.test(userId)
                 || !stats
@@ -838,7 +870,18 @@ function getGuildSettings(guildId) {
         guildSettings[guildId] = {
             gifRepliesEnabled: true,
             chatStatsEnabled: false,
-            users: {}
+            users: {},
+            counter: {
+                channelId: null,
+                value: 0
+            }
+        };
+    }
+
+    if (!guildSettings[guildId].counter) {
+        guildSettings[guildId].counter = {
+            channelId: null,
+            value: 0
         };
     }
 
@@ -1456,6 +1499,52 @@ let commands = [
         .setDescription("Comprueba si el bot está funcionando."),
 
     new SlashCommandBuilder()
+        .setName("contador")
+        .setDescription("Configura el canal de conteo para este servidor.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addChannelOption(option =>
+            option
+                .setName("canal")
+                .setDescription("Canal donde la comunidad contará en orden.")
+                .setRequired(true)
+                .addChannelTypes(ChannelType.GuildText)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("chiste")
+        .setDescription("Cuenta un chiste aleatorio de iCloud."),
+
+    new SlashCommandBuilder()
+        .setName("moneda")
+        .setDescription("Lanza una moneda virtual: cara o cruz."),
+
+    new SlashCommandBuilder()
+        .setName("dado")
+        .setDescription("Lanza un dado con la cantidad de caras que elijas.")
+        .addIntegerOption(option =>
+            option
+                .setName("caras")
+                .setDescription("Número de caras del dado (2 a 100).")
+                .setRequired(false)
+                .setMinValue(2)
+                .setMaxValue(100)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("avatar")
+        .setDescription("Muestra el avatar de una persona.")
+        .addUserOption(option =>
+            option
+                .setName("usuario")
+                .setDescription("Persona cuyo avatar quieres ver; por defecto, tú.")
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("servidor")
+        .setDescription("Muestra información de este servidor."),
+
+    new SlashCommandBuilder()
         .setName("help")
         .setDescription("Muestra los comandos del bot organizados por categorías."),
 
@@ -1816,6 +1905,12 @@ const HELP_PAGES = [
             "`/superpoder` Descubre un poder absurdo con un efecto secundario peor.",
             "`/excusa` Consigue una excusa disparatada para cualquier situación.",
             "`/villano` Genera tu nombre, plan maestro y debilidad secreta.",
+            "`/chiste` Cuenta uno de más de veinte chistes aleatorios.",
+            "`/moneda` Lanza una moneda virtual.",
+            "`/dado [caras]` Lanza un dado de 2 a 100 caras.",
+            "`/contador canal` Configura un canal para contar números en orden. Solo administradores.",
+            "`/avatar [usuario]` Muestra el avatar de una persona.",
+            "`/servidor` Muestra información de este servidor.",
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
             "`/topniveles` Mira el ranking de niveles de este servidor.",
             "`/topchat` Mira quién ha escrito más en este servidor.",
@@ -2079,6 +2174,125 @@ client.on("guildMemberAdd", async member => {
 
 });
 
+async function handleCounterSetupCommand(interaction) {
+
+    if (interaction.commandName !== "contador") return false;
+
+    if (!interaction.guild) {
+        await interaction.reply({
+            content: "❌ Este comando solo se puede usar dentro de un servidor.",
+            ephemeral: true
+        });
+        return true;
+    }
+
+    if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+        await interaction.reply({
+            content: "❌ Solo los administradores pueden configurar el contador.",
+            ephemeral: true
+        });
+        return true;
+    }
+
+    const selectedChannel = interaction.options.getChannel("canal", true);
+    try {
+        const botMember = await interaction.guild.members.fetchMe();
+        if (!botMember.permissionsIn(selectedChannel).has([
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+        ])) {
+            return interaction.reply({
+                content: "❌ Necesito permisos para ver y enviar mensajes en el canal seleccionado.",
+                ephemeral: true
+            });
+        }
+
+        const settings = getGuildSettings(interaction.guild.id);
+        const previousCounter = { ...settings.counter };
+        settings.counter = {
+            channelId: selectedChannel.id,
+            value: 0
+        };
+
+        try {
+            saveGuildSettings();
+        } catch (error) {
+            settings.counter = previousCounter;
+            throw error;
+        }
+
+        return interaction.reply({
+            content: `✅ ${selectedChannel} quedó configurado para contar. La siguiente cuenta es **1**; escribe un número por mensaje.`,
+            ephemeral: true
+        });
+    } catch (error) {
+        console.error(`No pude configurar el contador en ${interaction.guild.name}:`, error);
+        if (interaction.replied || interaction.deferred) {
+            return interaction.followUp({
+                content: "❌ No pude configurar el contador. Revisa los permisos y vuelve a intentarlo.",
+                ephemeral: true
+            });
+        }
+        return interaction.reply({
+            content: "❌ No pude configurar el contador. Revisa los permisos y vuelve a intentarlo.",
+            ephemeral: true
+        });
+    }
+
+}
+
+async function handleCounterMessage(message) {
+
+    const settings = getGuildSettings(message.guild.id);
+    const counter = settings.counter;
+    if (!counter.channelId || message.channel.id !== counter.channelId) return false;
+
+    const countText = message.content.trim();
+    if (!/^\d+$/.test(countText)) return false;
+
+    const submittedCount = Number(countText);
+    const expectedCount = counter.value + 1;
+    if (!Number.isSafeInteger(submittedCount) || submittedCount !== expectedCount) {
+        try {
+            await message.reply({
+                content: `🔢 El contador sigue en **${counter.value}**. A la comunidad le toca escribir **${expectedCount}**.`,
+                allowedMentions: { parse: [] }
+            });
+        } catch (error) {
+            console.error(`No pude indicar el número esperado en ${message.guild.name}:`, error);
+        }
+        return true;
+    }
+
+    const previousValue = counter.value;
+    counter.value = submittedCount;
+
+    try {
+        saveGuildSettings();
+    } catch (error) {
+        counter.value = previousValue;
+        console.error(`No pude guardar el contador del servidor ${message.guild.name}:`, error);
+        try {
+            await message.reply({
+                content: "❌ No pude guardar este número. Inténtalo de nuevo en un momento.",
+                allowedMentions: { parse: [] }
+            });
+        } catch (replyError) {
+            console.error("No pude notificar que el contador no se guardó:", replyError);
+        }
+        return true;
+    }
+
+    try {
+        await message.react("✅");
+    } catch (error) {
+        console.error("No pude reaccionar al número correcto del contador:", error);
+    }
+
+    return true;
+
+}
+
 client.on("messageCreate", async message => {
 
     // Ignorar bots
@@ -2086,6 +2300,8 @@ client.on("messageCreate", async message => {
 
     // Ignorar mensajes privados
     if (!message.guild) return;
+
+    if (await handleCounterMessage(message)) return;
 
     const botReplyType = message.guild.id === PERSONALITY_GUILD_ID
         ? getBotReplyType(message)
@@ -2995,6 +3211,8 @@ client.on("interactionCreate", async interaction => {
 
     void logCommandUsage(interaction);
 
+    if (await handleCounterSetupCommand(interaction)) return;
+
     if (interaction.commandName === "sugerencia") {
         return handleSuggestionCommand(interaction);
     }
@@ -3818,6 +4036,88 @@ client.on("interactionCreate", async interaction => {
             `🏓 Pong!\nLatencia: **${latency}ms**`
         );
 
+    }
+
+    if (interaction.commandName === "chiste") {
+
+        const embed = new EmbedBuilder()
+            .setColor(0xf1c40f)
+            .setTitle("😂 Chiste aleatorio")
+            .setDescription(pickRandomMessage(JOKES))
+            .setFooter({ text: `Colección de ${JOKES.length} chistes · Pedido por ${interaction.user.username}` });
+
+        return interaction.reply({ embeds: [embed] });
+    }
+
+    if (interaction.commandName === "moneda") {
+
+        const result = Math.random() < 0.5 ? "🪙 **Cara**" : "🪙 **Cruz**";
+        return interaction.reply(`La moneda cayó en ${result}.`);
+    }
+
+    if (interaction.commandName === "dado") {
+
+        const sides = interaction.options.getInteger("caras") || 6;
+        const result = Math.floor(Math.random() * sides) + 1;
+        const embed = new EmbedBuilder()
+            .setColor(0x3498db)
+            .setTitle("🎲 Lanzamiento de dado")
+            .setDescription(`Salió **${result}** en un dado de **${sides}** caras.`)
+            .setFooter({ text: `Lanzado por ${interaction.user.username}` });
+
+        return interaction.reply({ embeds: [embed] });
+    }
+
+    if (interaction.commandName === "avatar") {
+
+        const target = interaction.options.getUser("usuario") || interaction.user;
+        const avatarUrl = target.displayAvatarURL({ size: 1024 });
+        const embed = new EmbedBuilder()
+            .setColor(0x3498db)
+            .setTitle(`🖼️ Avatar de ${target.globalName || target.username}`)
+            .setImage(avatarUrl)
+            .setURL(avatarUrl);
+
+        return interaction.reply({ embeds: [embed] });
+    }
+
+    if (interaction.commandName === "servidor") {
+
+        if (!interaction.guild) {
+            return interaction.reply({
+                content: "❌ Este comando solo se puede usar dentro de un servidor.",
+                ephemeral: true
+            });
+        }
+
+        const guild = interaction.guild;
+        const embed = new EmbedBuilder()
+            .setColor(0x3498db)
+            .setTitle(`🏠 ${guild.name}`)
+            .setDescription(`Información general de **${guild.name}**.`)
+            .addFields(
+                { name: "👥 Miembros", value: `${guild.memberCount.toLocaleString("es-MX")}`, inline: true },
+                {
+                    name: "💬 Canales de texto",
+                    value: `${guild.channels.cache.filter(channel =>
+                        channel.type === ChannelType.GuildText
+                        || channel.type === ChannelType.GuildAnnouncement
+                    ).size}`,
+                    inline: true
+                },
+                {
+                    name: "📅 Creado",
+                    value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:D>`,
+                    inline: true
+                }
+            )
+            .setFooter({ text: `ID: ${guild.id}` })
+            .setTimestamp(guild.createdAt);
+        const guildIcon = guild.iconURL({ size: 512 });
+
+        if (guildIcon) embed.setThumbnail(guildIcon);
+
+        return interaction.reply({ embeds: [embed] });
     }
 
     // =================================
