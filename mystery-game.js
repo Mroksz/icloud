@@ -206,7 +206,8 @@ function createMysteryEmbed(mystery, revealedClues, phase = "investigation", res
             value: `${solved
                 ? `${mystery.suspects[mystery.culprit].name} era responsable.`
                 : `Acusaste a ${mystery.suspects[result.suspectIndex].name}.`
-            }\n\n**Resolución:** ${mystery.solution}`
+            }\n\n**Resolución:** ${mystery.solution}` +
+                (result.rewardMessage ? `\n\n💰 ${result.rewardMessage}` : "")
         });
     }
 

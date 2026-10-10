@@ -105,6 +105,11 @@ const WORK_KIT_PRICE = 300;
 const WORK_KIT_USES = 3;
 const WORK_KIT_BONUS_MULTIPLIER = 1.5;
 const CRYSTAL_PASS_PRICE = 500;
+const MYSTERY_REWARD = 300;
+const MYSTERY_REWARD_COOLDOWN = 60 * 60 * 1000;
+const MINE_TOOL_USES = 10;
+const EXPEDITION_ENTRY_FEE = 100;
+const EXPEDITION_STAGES = 5;
 const WORK_COOLDOWN = 60 * 60 * 1000;
 const STEAL_COOLDOWN = 3 * 60 * 60 * 1000;
 const PESO_FORMATTER = new Intl.NumberFormat("es-MX", {
@@ -133,7 +138,73 @@ const SHOP_ITEMS = {
         name: "Pase de cristal",
         price: CRYSTAL_PASS_PRICE,
         description: "Te salva de una caída en una partida de /puente."
+    },
+    madera: {
+        name: "Madera",
+        price: 20,
+        description: "Material para fabricar herramientas. Receta del pico de madera: 3 maderas y 2 palos."
+    },
+    palo: {
+        name: "Palo",
+        price: 12,
+        description: "Material para fabricar herramientas; todos los picos necesitan 2 palos."
+    },
+    piedra: {
+        name: "Piedra",
+        price: 40,
+        description: "Material para fabricar un pico de piedra."
+    },
+    hierro: {
+        name: "Lingote de hierro",
+        price: 120,
+        description: "Material para fabricar un pico de hierro."
+    },
+    diamante: {
+        name: "Diamante",
+        price: 400,
+        description: "Material raro para fabricar el pico más potente."
     }
+};
+const MINING_MATERIALS = ["madera", "palo", "piedra", "hierro", "diamante"];
+const MINING_ORES = {
+    piedra: { name: "Piedra", price: 10 },
+    carbon: { name: "Carbón", price: 25 },
+    cobre: { name: "Cobre", price: 50 },
+    hierro: { name: "Mineral de hierro", price: 100 },
+    diamante: { name: "Diamante", price: 350 }
+};
+const PICKAXES = {
+    madera: { name: "Pico de madera", tier: 1, recipe: { madera: 3, palo: 2 } },
+    piedra: { name: "Pico de piedra", tier: 2, recipe: { piedra: 3, palo: 2 } },
+    hierro: { name: "Pico de hierro", tier: 3, recipe: { hierro: 3, palo: 2 } },
+    diamante: { name: "Pico de diamante", tier: 4, recipe: { diamante: 3, palo: 2 } }
+};
+const MINING_DROPS = {
+    madera: [
+        { ore: "piedra", chance: 0.4, minimum: 1, maximum: 3 },
+        { ore: "carbon", chance: 0.4, minimum: 1, maximum: 3 },
+        { ore: "cobre", chance: 0.2, minimum: 1, maximum: 2 }
+    ],
+    piedra: [
+        { ore: "piedra", chance: 0.2, minimum: 1, maximum: 3 },
+        { ore: "carbon", chance: 0.35, minimum: 1, maximum: 3 },
+        { ore: "cobre", chance: 0.3, minimum: 1, maximum: 3 },
+        { ore: "hierro", chance: 0.15, minimum: 1, maximum: 2 }
+    ],
+    hierro: [
+        { ore: "piedra", chance: 0.1, minimum: 1, maximum: 3 },
+        { ore: "carbon", chance: 0.2, minimum: 1, maximum: 3 },
+        { ore: "cobre", chance: 0.25, minimum: 1, maximum: 3 },
+        { ore: "hierro", chance: 0.35, minimum: 1, maximum: 3 },
+        { ore: "diamante", chance: 0.1, minimum: 1, maximum: 1 }
+    ],
+    diamante: [
+        { ore: "piedra", chance: 0.05, minimum: 1, maximum: 3 },
+        { ore: "carbon", chance: 0.15, minimum: 1, maximum: 3 },
+        { ore: "cobre", chance: 0.15, minimum: 1, maximum: 3 },
+        { ore: "hierro", chance: 0.25, minimum: 1, maximum: 3 },
+        { ore: "diamante", chance: 0.4, minimum: 1, maximum: 2 }
+    ]
 };
 const ENTERTAINMENT_CHALLENGES = [
     "Describe tu día como si fuera el tráiler de una película épica.",
@@ -799,9 +870,14 @@ function getEconomyAccount(guildId, userId) {
             balance: STARTING_BALANCE,
             lastWorkAt: 0,
             lastStealAt: 0,
+            lastMysteryRewardAt: 0,
             inventory: {
                 workKitUses: 0,
-                crystalPasses: 0
+                crystalPasses: 0,
+                materials: {},
+                ores: {},
+                pickaxe: null,
+                pickaxeUses: 0
             }
         };
         saveEconomyData();
@@ -812,8 +888,34 @@ function getEconomyAccount(guildId, userId) {
     if (!Number.isSafeInteger(account.inventory.workKitUses) || account.inventory.workKitUses < 0) {
         account.inventory.workKitUses = 0;
     }
+    if (!Number.isFinite(account.lastMysteryRewardAt) || account.lastMysteryRewardAt < 0) {
+        account.lastMysteryRewardAt = 0;
+    }
     if (!Number.isSafeInteger(account.inventory.crystalPasses) || account.inventory.crystalPasses < 0) {
         account.inventory.crystalPasses = 0;
+    }
+    if (!account.inventory.materials || typeof account.inventory.materials !== "object") {
+        account.inventory.materials = {};
+    }
+    for (const material of MINING_MATERIALS) {
+        if (!Number.isSafeInteger(account.inventory.materials[material]) || account.inventory.materials[material] < 0) {
+            account.inventory.materials[material] = 0;
+        }
+    }
+    if (!account.inventory.ores || typeof account.inventory.ores !== "object") {
+        account.inventory.ores = {};
+    }
+    for (const ore of Object.keys(MINING_ORES)) {
+        if (!Number.isSafeInteger(account.inventory.ores[ore]) || account.inventory.ores[ore] < 0) {
+            account.inventory.ores[ore] = 0;
+        }
+    }
+    if (!Object.prototype.hasOwnProperty.call(PICKAXES, account.inventory.pickaxe)) {
+        account.inventory.pickaxe = null;
+        account.inventory.pickaxeUses = 0;
+    }
+    if (!Number.isSafeInteger(account.inventory.pickaxeUses) || account.inventory.pickaxeUses < 0) {
+        account.inventory.pickaxeUses = 0;
     }
 
     return account;
@@ -1198,9 +1300,263 @@ function createBridgeButtons(gameId, crossedStages, disabled = false) {
     ];
 }
 
+const EXPEDITION_ROUTES = [
+    { id: "sendero", label: "🌲 Sendero seguro", risk: 0.12, reward: 70 },
+    { id: "cueva", label: "🪨 Cueva profunda", risk: 0.3, reward: 130 },
+    { id: "ruinas", label: "🏛️ Ruinas antiguas", risk: 0.5, reward: 220 }
+];
+
+function createExpeditionEmbed(stage, loot, status) {
+    const progress = Array.from({ length: EXPEDITION_STAGES }, (_, index) =>
+        index < stage ? "✅" : index === stage ? "🔹" : "▫️"
+    ).join(" ");
+    const payout = EXPEDITION_ENTRY_FEE + loot;
+    return createEconomyEmbed(
+        "🧭 Expedición: tierras perdidas",
+        [
+            `**Zona:** ${Math.min(stage + 1, EXPEDITION_STAGES)} / ${EXPEDITION_STAGES}`,
+            progress,
+            `**Botín acumulado:** ${formatPesos(loot)}`,
+            `**Cobro seguro si regresas:** ${formatPesos(payout)} (incluye tu entrada)`,
+            status,
+            `**Rutas disponibles:**\n${EXPEDITION_ROUTES.map(route =>
+                `${route.label}: ${Math.round(route.risk * 100)}% de riesgo · premio ${formatPesos(route.reward * (stage + 1))}`
+            ).join("\n")}`,
+            "Elige una ruta por zona. Las rutas más peligrosas dan más botín; si caes, pierdes la entrada y todo el botín sin cobrar."
+        ].join("\n"),
+        0x378b72
+    );
+}
+
+function createExpeditionButtons(gameId, disabled = false) {
+    return [
+        new ActionRowBuilder().addComponents(
+            ...EXPEDITION_ROUTES.map(route =>
+                new ButtonBuilder()
+                    .setCustomId(`expedition-${gameId}-${route.id}`)
+                    .setLabel(route.label)
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(disabled)
+            ),
+            new ButtonBuilder()
+                .setCustomId(`expedition-${gameId}-return`)
+                .setLabel("🏕️ Regresar y cobrar")
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(disabled)
+        )
+    ];
+}
+
+async function startExpedition(interaction) {
+    const account = getEconomyAccount(interaction.guild.id, interaction.user.id);
+    if (account.balance < EXPEDITION_ENTRY_FEE) {
+        await replyEconomyError(interaction, `Necesitas ${formatPesos(EXPEDITION_ENTRY_FEE)} para entrar; tienes ${formatPesos(account.balance)}.`);
+        return;
+    }
+
+    const oldBalance = account.balance;
+    account.balance -= EXPEDITION_ENTRY_FEE;
+    try {
+        saveEconomyData();
+    } catch (error) {
+        account.balance = oldBalance;
+        console.error("No pude cobrar la entrada de la expedición:", error);
+        await replyEconomyError(interaction, "No se pudo iniciar la expedición ni cobrar la entrada.");
+        return;
+    }
+
+    const gameId = interaction.id;
+    let stage = 0;
+    let loot = 0;
+    let processing = false;
+    let settled = false;
+    let gameMessage;
+    const settle = payout => {
+        if (settled) return false;
+        const balanceBeforePayout = account.balance;
+        account.balance += payout;
+        try {
+            saveEconomyData();
+            settled = true;
+            return true;
+        } catch (error) {
+            account.balance = balanceBeforePayout;
+            console.error("No pude guardar el resultado de la expedición:", error);
+            return false;
+        }
+    };
+
+    try {
+        await interaction.reply({
+            embeds: [createExpeditionEmbed(
+                stage,
+                loot,
+                `La expedición cuesta ${formatPesos(EXPEDITION_ENTRY_FEE)}. Completa ${EXPEDITION_STAGES} zonas o regresa con el botín acumulado.`
+            )],
+            components: createExpeditionButtons(gameId)
+        });
+        gameMessage = await interaction.fetchReply();
+    } catch (error) {
+        console.error("No pude publicar la expedición:", error);
+        const refunded = settle(EXPEDITION_ENTRY_FEE);
+        const message = refunded
+            ? "❌ No pude abrir la expedición; tu entrada fue devuelta."
+            : "❌ No pude abrir la expedición ni devolver tu entrada automáticamente. Contacta a un administrador.";
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({
+                content: message,
+                embeds: [],
+                components: createExpeditionButtons(gameId, true)
+            }).catch(editError =>
+                console.error("No pude actualizar el inicio de la expedición:", editError)
+            );
+        } else {
+            await interaction.reply({ content: message, ephemeral: true }).catch(replyError =>
+                console.error("No pude informar del error de la expedición:", replyError)
+            );
+        }
+        return;
+    }
+
+    const collector = gameMessage.createMessageComponentCollector({
+        time: 180000,
+        filter: buttonInteraction =>
+            buttonInteraction.customId.startsWith(`expedition-${gameId}-`)
+    });
+    collector.on("collect", async buttonInteraction => {
+        if (buttonInteraction.user.id !== interaction.user.id) {
+            await buttonInteraction.reply({
+                content: "Esta expedición pertenece a quien la inició.",
+                ephemeral: true
+            });
+            return;
+        }
+        if (processing || settled) {
+            await buttonInteraction.deferUpdate();
+            return;
+        }
+        processing = true;
+        try {
+            const routeId = buttonInteraction.customId.slice(`expedition-${gameId}-`.length);
+            if (routeId === "return") {
+                const payout = EXPEDITION_ENTRY_FEE + loot;
+                if (!settle(payout)) {
+                    await buttonInteraction.reply({
+                        content: "❌ No pude guardar el cobro; la expedición sigue activa.",
+                        ephemeral: true
+                    });
+                    return;
+                }
+                collector.stop("returned");
+                await buttonInteraction.update({
+                    embeds: [createEconomyEmbed(
+                        "🏕️ Expedición completada",
+                        `Regresaste con **${formatPesos(loot)}** de botín y recuperaste tu entrada. Cobro total: **${formatPesos(payout)}**.\nSaldo: **${formatPesos(account.balance)}**`
+                    )],
+                    components: createExpeditionButtons(gameId, true)
+                });
+                return;
+            }
+
+            const route = EXPEDITION_ROUTES.find(candidate => candidate.id === routeId);
+            if (!route) {
+                await buttonInteraction.reply({
+                    content: "❌ Esa ruta no existe.",
+                    ephemeral: true
+                });
+                return;
+            }
+
+            await buttonInteraction.deferUpdate();
+            collector.resetTimer();
+            if (Math.random() < route.risk) {
+                settled = true;
+                collector.stop("lost");
+                await gameMessage.edit({
+                    embeds: [createEconomyEmbed(
+                        "🪤 ¡La expedición salió mal!",
+                        `La ruta **${route.label}** resultó peligrosa. Perdiste la entrada de **${formatPesos(EXPEDITION_ENTRY_FEE)}** y el botín sin cobrar (**${formatPesos(loot)}**).\nSaldo: **${formatPesos(account.balance)}**. Puedes intentarlo de nuevo con \`/expedicion\`.`,
+                        0xc2413b
+                    )],
+                    components: createExpeditionButtons(gameId, true)
+                });
+                return;
+            }
+
+            const reward = route.reward * (stage + 1);
+            loot += reward;
+            stage++;
+            if (stage === EXPEDITION_STAGES) {
+                const payout = EXPEDITION_ENTRY_FEE + loot;
+                if (!settle(payout)) {
+                    await buttonInteraction.followUp({
+                        content: "❌ No pude guardar el premio. Contacta a un administrador antes de iniciar otra expedición.",
+                        ephemeral: true
+                    });
+                    collector.stop("error");
+                    return;
+                }
+                collector.stop("returned");
+                await gameMessage.edit({
+                    embeds: [createEconomyEmbed(
+                        "🏆 ¡Expedición conquistada!",
+                        `Completaste las cinco zonas y regresaste con **${formatPesos(loot)}** de botín. Cobro total: **${formatPesos(payout)}**.\nSaldo: **${formatPesos(account.balance)}**`
+                    )],
+                    components: createExpeditionButtons(gameId, true)
+                });
+                return;
+            }
+
+            await gameMessage.edit({
+                embeds: [createExpeditionEmbed(
+                    stage,
+                    loot,
+                    `✅ Sobreviviste a **${route.label}** y hallaste **${formatPesos(reward)}**. ¿Qué ruta tomarás ahora?`
+                )],
+                components: createExpeditionButtons(gameId)
+            });
+        } catch (error) {
+            console.error("Falló una ronda de la expedición:", error);
+            const message = "❌ Ocurrió un error al procesar la ruta. Si la partida quedó bloqueada, contacta a un administrador.";
+            const notify = buttonInteraction.deferred || buttonInteraction.replied
+                ? buttonInteraction.followUp({ content: message, ephemeral: true })
+                : buttonInteraction.reply({ content: message, ephemeral: true });
+            await notify.catch(replyError =>
+                console.error("No pude mostrar el error de la expedición:", replyError)
+            );
+        } finally {
+            processing = false;
+        }
+    });
+
+    collector.on("end", async (_, reason) => {
+        if (settled) return;
+        const payout = EXPEDITION_ENTRY_FEE + loot;
+        if (settle(payout)) {
+            await gameMessage.edit({
+                embeds: [createEconomyEmbed(
+                    "⌛ Expedición cerrada",
+                    `La expedición terminó por inactividad. Se guardó tu botín y se devolvió la entrada: **${formatPesos(payout)}**.\nSaldo: **${formatPesos(account.balance)}**`
+                )],
+                components: createExpeditionButtons(gameId, true)
+            }).catch(error => console.error("No pude cerrar la expedición:", error));
+        } else {
+            console.error(`No pude cerrar la expedición ${gameId} (motivo: ${reason}).`);
+            await gameMessage.edit({
+                embeds: [createEconomyEmbed(
+                    "⚠️ No se pudo cerrar la expedición",
+                    "No pude guardar tu cobro. Contacta a un administrador y no inicies otra expedición.",
+                    0xd97706
+                )],
+                components: createExpeditionButtons(gameId, true)
+            }).catch(error => console.error("No pude mostrar el error al cerrar la expedición:", error));
+        }
+    });
+}
+
 async function handleShopCommand(interaction) {
     const commandName = interaction.commandName;
-    if (!["tienda", "comprar", "inventario"].includes(commandName)) return false;
+    if (!["tienda", "comprar", "inventario", "fabricar", "picar", "vender"].includes(commandName)) return false;
 
     if (!interaction.guild) {
         await replyEconomyError(interaction, "La tienda solo está disponible dentro de un servidor.");
@@ -1214,7 +1570,7 @@ async function handleShopCommand(interaction) {
             embeds: [createEconomyEmbed(
                 "🛒 Tienda de iCloud",
                 Object.entries(SHOP_ITEMS).map(([id, item]) =>
-                    `**${item.name}** · ${formatPesos(item.price)}\n${item.description}\nCompra con \`/comprar objeto:${id}\`.`
+                    `**${item.name}** · ${formatPesos(item.price)}\n${item.description}\nCompra con \`/comprar objeto:${id} cantidad:1\`.`
                 ).join("\n\n")
             )]
         });
@@ -1228,44 +1584,191 @@ async function handleShopCommand(interaction) {
                 [
                     `**Usos de kit de trabajo:** ${account.inventory.workKitUses}`,
                     `**Pases de cristal:** ${account.inventory.crystalPasses}`,
-                    "Usa `/trabajar` para gastar un uso del kit; el pase se consume automáticamente al caer en `/puente`."
+                    `**Materiales:** ${MINING_MATERIALS.map(material =>
+                        `${SHOP_ITEMS[material].name}: ${account.inventory.materials[material]}`
+                    ).join(" · ")}`,
+                    `**Minerales:** ${Object.entries(MINING_ORES).map(([ore, data]) =>
+                        `${data.name}: ${account.inventory.ores[ore]}`
+                    ).join(" · ")}`,
+                    `**Pico equipado:** ${account.inventory.pickaxe
+                        ? `${PICKAXES[account.inventory.pickaxe].name} (${account.inventory.pickaxeUses}/${MINE_TOOL_USES} usos)`
+                        : "ninguno"}`,
+                    "Usa `/fabricar` para crear picos, `/picar` para minar y `/vender` para convertir minerales en pesos."
                 ].join("\n")
             )]
         });
         return true;
     }
 
-    const itemId = interaction.options.getString("objeto", true);
-    const item = SHOP_ITEMS[itemId];
-    if (!item) {
-        await replyEconomyError(interaction, "Ese objeto no existe en la tienda.");
-        return true;
-    }
-    if (account.balance < item.price) {
-        await replyEconomyError(interaction, `Necesitas ${formatPesos(item.price)} y tienes ${formatPesos(account.balance)}.`);
+    const snapshotInventory = () => ({
+        ...account.inventory,
+        materials: { ...account.inventory.materials },
+        ores: { ...account.inventory.ores }
+    });
+    const restoreInventory = snapshot => {
+        account.inventory = snapshot;
+    };
+
+    if (commandName === "comprar") {
+        const itemId = interaction.options.getString("objeto", true);
+        const item = SHOP_ITEMS[itemId];
+        const quantity = interaction.options.getInteger("cantidad") || 1;
+        if (!item) {
+            await replyEconomyError(interaction, "Ese objeto no existe en la tienda.");
+            return true;
+        }
+        const totalPrice = item.price * quantity;
+        if (account.balance < totalPrice) {
+            await replyEconomyError(interaction, `Necesitas ${formatPesos(totalPrice)} y tienes ${formatPesos(account.balance)}.`);
+            return true;
+        }
+
+        const oldBalance = account.balance;
+        const oldInventory = snapshotInventory();
+        account.balance -= totalPrice;
+        if (itemId === "kit_trabajo") account.inventory.workKitUses += WORK_KIT_USES * quantity;
+        else if (itemId === "pase_cristal") account.inventory.crystalPasses += quantity;
+        else account.inventory.materials[itemId] += quantity;
+
+        try {
+            saveEconomyData();
+        } catch (error) {
+            account.balance = oldBalance;
+            restoreInventory(oldInventory);
+            console.error("No pude guardar la compra de la tienda:", error);
+            await replyEconomyError(interaction, "No se pudo guardar tu compra. No se te cobró; inténtalo de nuevo.");
+            return true;
+        }
+
+        await interaction.reply({
+            embeds: [createEconomyEmbed(
+                "✅ Compra completada",
+                `Compraste **${quantity} × ${item.name}** por ${formatPesos(totalPrice)}.\nSaldo: **${formatPesos(account.balance)}**\nUsa \`/inventario\` para consultar tus objetos.`
+            )]
+        });
         return true;
     }
 
+    if (commandName === "fabricar") {
+        const pickaxeId = interaction.options.getString("pico", true);
+        const pickaxe = PICKAXES[pickaxeId];
+        const currentPickaxe = PICKAXES[account.inventory.pickaxe];
+        if (
+            currentPickaxe
+            && currentPickaxe.tier >= pickaxe.tier
+            && account.inventory.pickaxeUses > 0
+        ) {
+            await replyEconomyError(interaction, `Ya tienes un **${currentPickaxe.name}** con usos restantes. Gástalo antes de fabricar otro.`);
+            return true;
+        }
+        const missing = Object.entries(pickaxe.recipe)
+            .filter(([material, amount]) => account.inventory.materials[material] < amount)
+            .map(([material, amount]) =>
+                `${amount - account.inventory.materials[material]} ${SHOP_ITEMS[material].name}`
+            );
+        if (missing.length) {
+            await replyEconomyError(
+                interaction,
+                `Te faltan materiales para fabricar **${pickaxe.name}**: ${missing.join(", ")}. Consulta \`/tienda\` y \`/inventario\`.`
+            );
+            return true;
+        }
+
+        const oldInventory = snapshotInventory();
+        for (const [material, amount] of Object.entries(pickaxe.recipe)) {
+            account.inventory.materials[material] -= amount;
+        }
+        account.inventory.pickaxe = pickaxeId;
+        account.inventory.pickaxeUses = MINE_TOOL_USES;
+        try {
+            saveEconomyData();
+        } catch (error) {
+            restoreInventory(oldInventory);
+            console.error("No pude guardar la fabricación del pico:", error);
+            await replyEconomyError(interaction, "No se pudo guardar la fabricación; no se gastaron tus materiales.");
+            return true;
+        }
+
+        await interaction.reply({
+            embeds: [createEconomyEmbed(
+                "🛠️ ¡Pico fabricado!",
+                `Fabricaste **${pickaxe.name}** con **${Object.entries(pickaxe.recipe)
+                    .map(([material, amount]) => `${amount} ${SHOP_ITEMS[material].name}`)
+                    .join(" y ")}**.\nTiene **${MINE_TOOL_USES} usos**. Usa \`/picar\` para buscar minerales.`
+            )]
+        });
+        return true;
+    }
+
+    if (commandName === "picar") {
+        const pickaxeId = account.inventory.pickaxe;
+        const pickaxe = PICKAXES[pickaxeId];
+        if (!pickaxe || account.inventory.pickaxeUses < 1) {
+            await replyEconomyError(interaction, "No tienes un pico con usos disponibles. Compra materiales en `/tienda` y fabrica uno con `/fabricar`.");
+            return true;
+        }
+
+        const table = MINING_DROPS[pickaxeId];
+        let roll = Math.random();
+        let drop = table[table.length - 1];
+        for (const candidate of table) {
+            roll -= candidate.chance;
+            if (roll < 0) {
+                drop = candidate;
+                break;
+            }
+        }
+        const quantity = Math.floor(Math.random() * (drop.maximum - drop.minimum + 1)) + drop.minimum;
+        const oldInventory = snapshotInventory();
+        account.inventory.pickaxeUses--;
+        account.inventory.ores[drop.ore] += quantity;
+        try {
+            saveEconomyData();
+        } catch (error) {
+            restoreInventory(oldInventory);
+            console.error("No pude guardar los minerales extraídos:", error);
+            await replyEconomyError(interaction, "No se pudo guardar la minería; no se gastó el uso del pico.");
+            return true;
+        }
+
+        await interaction.reply({
+            embeds: [createEconomyEmbed(
+                "⛏️ ¡Mineral encontrado!",
+                `Usaste **${pickaxe.name}** y encontraste **${quantity} × ${MINING_ORES[drop.ore].name}**.\n` +
+                `Durabilidad: **${account.inventory.pickaxeUses}/${MINE_TOOL_USES} usos**.\n` +
+                `Precio de venta actual: **${formatPesos(MINING_ORES[drop.ore].price * quantity)}**. Usa \`/vender\` para convertir tus minerales en pesos.`
+            )]
+        });
+        return true;
+    }
+
+    const sale = Object.entries(account.inventory.ores).reduce(
+        (total, [ore, quantity]) => total + quantity * MINING_ORES[ore].price,
+        0
+    );
+    if (sale <= 0) {
+        await replyEconomyError(interaction, "No tienes minerales para vender. Fabrica un pico y usa `/picar`.");
+        return true;
+    }
     const oldBalance = account.balance;
-    const oldInventory = { ...account.inventory };
-    account.balance -= item.price;
-    if (itemId === "kit_trabajo") account.inventory.workKitUses += WORK_KIT_USES;
-    if (itemId === "pase_cristal") account.inventory.crystalPasses++;
-
+    const oldOres = { ...account.inventory.ores };
+    account.balance += sale;
+    for (const ore of Object.keys(account.inventory.ores)) {
+        account.inventory.ores[ore] = 0;
+    }
     try {
         saveEconomyData();
     } catch (error) {
         account.balance = oldBalance;
-        account.inventory = oldInventory;
-        console.error("No pude guardar la compra de la tienda:", error);
-        await replyEconomyError(interaction, "No se pudo guardar tu compra. No se te cobró; inténtalo de nuevo.");
+        account.inventory.ores = oldOres;
+        console.error("No pude guardar la venta de minerales:", error);
+        await replyEconomyError(interaction, "No se pudo guardar la venta; conservas tus minerales.");
         return true;
     }
-
     await interaction.reply({
         embeds: [createEconomyEmbed(
-            "✅ Compra completada",
-            `Compraste **${item.name}** por ${formatPesos(item.price)}.\nSaldo: **${formatPesos(account.balance)}**\nUsa \`/inventario\` para consultar tus objetos.`
+            "💰 Minerales vendidos",
+            `Convertiste tus minerales en **${formatPesos(sale)}**.\nSaldo: **${formatPesos(account.balance)}**`
         )]
     });
     return true;
@@ -1578,14 +2081,15 @@ async function startCrystalBridge(interaction) {
 
     collector.on("end", async (_, reason) => {
         if (settled) return;
-        if (settle(CRYSTAL_BRIDGE_ENTRY_FEE)) {
+        const payout = CRYSTAL_BRIDGE_ENTRY_FEE + crossedStages * CRYSTAL_BRIDGE_STAGE_REWARD;
+        if (settle(payout)) {
             const title = reason === "time"
                 ? "⌛ Puente cerrado por inactividad"
                 : "⚠️ Partida del Puente cerrada";
             await gameMessage.edit({
                 embeds: [createEconomyEmbed(
                     title,
-                    `Se te devolvió la entrada de **${formatPesos(CRYSTAL_BRIDGE_ENTRY_FEE)}**; el premio por progreso requiere finalizar manualmente.\nSaldo: **${formatPesos(account.balance)}**`
+                    `Se guardó tu progreso y recibiste **${formatPesos(payout)}** (incluye la entrada y el valor de los tramos superados).\nSaldo: **${formatPesos(account.balance)}**`
                 )],
                 components: createBridgeButtons(gameId, crossedStages, true)
             }).catch(error => console.error("No pude cerrar la partida del Puente:", error));
@@ -1605,7 +2109,7 @@ async function startCrystalBridge(interaction) {
 
 async function handleEconomyCommand(interaction) {
 
-    const economyCommands = ["saldo", "trabajar", "ruleta", "apostar", "robar", "top", "puente"];
+    const economyCommands = ["saldo", "trabajar", "ruleta", "apostar", "robar", "top", "puente", "expedicion"];
 
     if (!economyCommands.includes(interaction.commandName)) return false;
 
@@ -1619,6 +2123,10 @@ async function handleEconomyCommand(interaction) {
 
     if (interaction.commandName === "puente") {
         await startCrystalBridge(interaction);
+        return true;
+    }
+    if (interaction.commandName === "expedicion") {
+        await startExpedition(interaction);
         return true;
     }
 
@@ -2012,6 +2520,10 @@ let commands = [
         .setDescription("Cruza el Puente de cristal por una entrada fija de $100."),
 
     new SlashCommandBuilder()
+        .setName("expedicion")
+        .setDescription("Explora rutas cada vez más arriesgadas y cobra antes de caer."),
+
+    new SlashCommandBuilder()
         .setName("tienda")
         .setDescription("Consulta los objetos que puedes comprar con tu saldo."),
 
@@ -2025,13 +2537,50 @@ let commands = [
                 .setRequired(true)
                 .addChoices(
                     { name: "Kit de trabajo ($300)", value: "kit_trabajo" },
-                    { name: "Pase de cristal ($500)", value: "pase_cristal" }
+                    { name: "Pase de cristal ($500)", value: "pase_cristal" },
+                    { name: "Madera ($20)", value: "madera" },
+                    { name: "Palo ($12)", value: "palo" },
+                    { name: "Piedra ($40)", value: "piedra" },
+                    { name: "Lingote de hierro ($120)", value: "hierro" },
+                    { name: "Diamante ($400)", value: "diamante" }
                 )
+        )
+        .addIntegerOption(option =>
+            option
+                .setName("cantidad")
+                .setDescription("Unidades a comprar (1 a 64).")
+                .setRequired(false)
+                .setMinValue(1)
+                .setMaxValue(64)
         ),
 
     new SlashCommandBuilder()
         .setName("inventario")
         .setDescription("Consulta tus objetos y usos disponibles."),
+
+    new SlashCommandBuilder()
+        .setName("fabricar")
+        .setDescription("Fabrica un pico con los materiales de tu inventario.")
+        .addStringOption(option =>
+            option
+                .setName("pico")
+                .setDescription("Herramienta que quieres fabricar.")
+                .setRequired(true)
+                .addChoices(
+                    { name: "Pico de madera", value: "madera" },
+                    { name: "Pico de piedra", value: "piedra" },
+                    { name: "Pico de hierro", value: "hierro" },
+                    { name: "Pico de diamante", value: "diamante" }
+                )
+        ),
+
+    new SlashCommandBuilder()
+        .setName("picar")
+        .setDescription("Pica minerales con el pico que tengas equipado."),
+
+    new SlashCommandBuilder()
+        .setName("vender")
+        .setDescription("Vende todos los minerales extraídos a cambio de pesos."),
 
     new SlashCommandBuilder()
         .setName("ajustarsaldo")
@@ -2470,9 +3019,13 @@ const HELP_PAGES = [
             "`/robar usuario` Tienes 40% de éxito; si fallas, pagas una multa. Espera 3 horas entre intentos.",
             "`/top` Mira las 10 mayores fortunas de este servidor.",
             "`/puente` Paga $100 para cruzar ocho tramos; cada acierto aumenta el cobro en $100. Puedes finalizar cuando quieras; caer sin pase hace perder la entrada.",
-            "`/tienda` Consulta kits de trabajo ($300) y pases de cristal ($500).",
-            "`/comprar objeto` Compra un kit de trabajo o un pase de cristal.",
-            "`/inventario` Consulta los objetos que te quedan.",
+            "`/expedicion` Elige entre rutas seguras o peligrosas en cinco zonas; regresa para cobrar tu entrada y el botín acumulado.",
+            "`/tienda` Consulta mejoras y materiales para minar: madera, palos, piedra, hierro y diamantes.",
+            "`/comprar objeto [cantidad]` Compra mejoras o materiales para fabricar picos.",
+            "`/fabricar pico` Usa materiales para fabricar un pico de madera, piedra, hierro o diamante.",
+            "`/picar` Gasta un uso de tu pico para extraer minerales; los picos mejores encuentran minerales de mayor valor.",
+            "`/vender` Convierte todos tus minerales en pesos.",
+            "`/inventario` Consulta tus mejoras, materiales, minerales y la durabilidad del pico.",
             "`/ajustarsaldo usuario cantidad` Suma o resta saldo a un usuario. Solo administradores."
         ].join("\n\n")
     },
@@ -2481,7 +3034,7 @@ const HELP_PAGES = [
         description: [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
             "`/akinator` Piensa en alguien o algo y responde hasta que Akinator adivine.",
-            "`/misterio` Investiga un caso interactivo y acusa al sospechoso correcto.",
+            "`/misterio` Investiga un caso y gana $300 al resolverlo correctamente; hay un tiempo de espera de una hora entre premios.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/superpoder` Descubre un poder absurdo con un efecto secundario peor.",
@@ -4359,6 +4912,37 @@ client.on("interactionCreate", async interaction => {
                         });
                     }
 
+                    let rewardMessage = "";
+                    if (suspectIndex === mystery.culprit) {
+                        try {
+                            const solverAccount = getEconomyAccount(
+                                interaction.guild.id,
+                                buttonInteraction.user.id
+                            );
+                            const now = Date.now();
+                            const rewardCooldownRemaining = MYSTERY_REWARD_COOLDOWN
+                                - (now - solverAccount.lastMysteryRewardAt);
+                            if (rewardCooldownRemaining > 0) {
+                                rewardMessage = `Este caso fue resuelto, pero ya recibiste un premio recientemente. Podrás ganar otra recompensa en ${Math.ceil(rewardCooldownRemaining / 60000)} min.`;
+                            } else {
+                                const oldBalance = solverAccount.balance;
+                                const oldRewardAt = solverAccount.lastMysteryRewardAt;
+                                solverAccount.balance += MYSTERY_REWARD;
+                                solverAccount.lastMysteryRewardAt = now;
+                                try {
+                                    saveEconomyData();
+                                    rewardMessage = `Ganaste ${formatPesos(MYSTERY_REWARD)} por resolverlo. Saldo: ${formatPesos(solverAccount.balance)}.`;
+                                } catch (error) {
+                                    solverAccount.balance = oldBalance;
+                                    solverAccount.lastMysteryRewardAt = oldRewardAt;
+                                    throw error;
+                                }
+                            }
+                        } catch (error) {
+                            console.error("No pude guardar el premio del misterio:", error);
+                            rewardMessage = "El caso quedó resuelto, pero no pude guardar el premio. Contacta a un administrador.";
+                        }
+                    }
                     phase = "resolved";
                     collector.stop("solved");
                     return buttonInteraction.update({
@@ -4366,7 +4950,7 @@ client.on("interactionCreate", async interaction => {
                             mystery,
                             revealedClues,
                             phase,
-                            { suspectIndex }
+                            { suspectIndex, rewardMessage }
                         )],
                         components: []
                     });
