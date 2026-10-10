@@ -98,6 +98,13 @@ const AUTOMOD_SPAM_MESSAGE_LIMIT = 5;
 const AUTOMOD_WARNING_COOLDOWN_MS = 10000;
 const STARTING_BALANCE = 1000;
 const MINIMUM_BET = 10;
+const CRYSTAL_BRIDGE_ENTRY_FEE = 100;
+const CRYSTAL_BRIDGE_STAGES = 8;
+const CRYSTAL_BRIDGE_STAGE_REWARD = 100;
+const WORK_KIT_PRICE = 300;
+const WORK_KIT_USES = 3;
+const WORK_KIT_BONUS_MULTIPLIER = 1.5;
+const CRYSTAL_PASS_PRICE = 500;
 const WORK_COOLDOWN = 60 * 60 * 1000;
 const STEAL_COOLDOWN = 3 * 60 * 60 * 1000;
 const PESO_FORMATTER = new Intl.NumberFormat("es-MX", {
@@ -116,6 +123,18 @@ const WORK_JOBS = [
     { name: "traductor de maullidos", minimum: 110, maximum: 300 },
     { name: "cazador de bugs", minimum: 200, maximum: 400 }
 ];
+const SHOP_ITEMS = {
+    kit_trabajo: {
+        name: "Kit de trabajo",
+        price: WORK_KIT_PRICE,
+        description: `Aumenta 50% las ganancias de tus próximos ${WORK_KIT_USES} turnos de /trabajar.`
+    },
+    pase_cristal: {
+        name: "Pase de cristal",
+        price: CRYSTAL_PASS_PRICE,
+        description: "Te salva de una caída en una partida de /puente."
+    }
+};
 const ENTERTAINMENT_CHALLENGES = [
     "Describe tu día como si fuera el tráiler de una película épica.",
     "Inventa un nombre de superhéroe para la persona que escribió antes que tú.",
@@ -779,12 +798,25 @@ function getEconomyAccount(guildId, userId) {
         economyData[guildId][userId] = {
             balance: STARTING_BALANCE,
             lastWorkAt: 0,
-            lastStealAt: 0
+            lastStealAt: 0,
+            inventory: {
+                workKitUses: 0,
+                crystalPasses: 0
+            }
         };
         saveEconomyData();
     }
 
-    return economyData[guildId][userId];
+    const account = economyData[guildId][userId];
+    if (!account.inventory || typeof account.inventory !== "object") account.inventory = {};
+    if (!Number.isSafeInteger(account.inventory.workKitUses) || account.inventory.workKitUses < 0) {
+        account.inventory.workKitUses = 0;
+    }
+    if (!Number.isSafeInteger(account.inventory.crystalPasses) || account.inventory.crystalPasses < 0) {
+        account.inventory.crystalPasses = 0;
+    }
+
+    return account;
 }
 
 function loadGuildSettings() {
@@ -1124,9 +1156,456 @@ async function replyEconomyError(interaction, description) {
     });
 }
 
+function createBridgeEmbed(crossedStages, status, account) {
+    const progress = Array.from({ length: CRYSTAL_BRIDGE_STAGES }, (_, index) =>
+        index < crossedStages ? "✅" : index === crossedStages ? "🔹" : "▫️"
+    ).join(" ");
+    const cashout = CRYSTAL_BRIDGE_ENTRY_FEE + crossedStages * CRYSTAL_BRIDGE_STAGE_REWARD;
+
+    return createEconomyEmbed(
+        "🌉 Puente de cristal",
+        [
+            `**Tramo:** ${Math.min(crossedStages + 1, CRYSTAL_BRIDGE_STAGES)} / ${CRYSTAL_BRIDGE_STAGES}`,
+            progress,
+            `**Cobro seguro ahora:** ${formatPesos(cashout)} (incluye tu entrada)`,
+            `**Pases de cristal:** ${account.inventory.crystalPasses}`,
+            status,
+            "Elige izquierda o derecha. Cada acierto añade $100 al cobro; caer sin pase te hace perder la entrada de $100."
+        ].join("\n"),
+        0x4387c4
+    );
+}
+
+function createBridgeButtons(gameId, crossedStages, disabled = false) {
+    return [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`bridge-${gameId}-left`)
+                .setLabel("⬅️ Izquierda")
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(disabled),
+            new ButtonBuilder()
+                .setCustomId(`bridge-${gameId}-right`)
+                .setLabel("Derecha ➡️")
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(disabled),
+            new ButtonBuilder()
+                .setCustomId(`bridge-${gameId}-finish`)
+                .setLabel(crossedStages ? "Cobrar y finalizar" : "Finalizar")
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(disabled)
+        )
+    ];
+}
+
+async function handleShopCommand(interaction) {
+    const commandName = interaction.commandName;
+    if (!["tienda", "comprar", "inventario"].includes(commandName)) return false;
+
+    if (!interaction.guild) {
+        await replyEconomyError(interaction, "La tienda solo está disponible dentro de un servidor.");
+        return true;
+    }
+
+    const account = getEconomyAccount(interaction.guild.id, interaction.user.id);
+
+    if (commandName === "tienda") {
+        await interaction.reply({
+            embeds: [createEconomyEmbed(
+                "🛒 Tienda de iCloud",
+                Object.entries(SHOP_ITEMS).map(([id, item]) =>
+                    `**${item.name}** · ${formatPesos(item.price)}\n${item.description}\nCompra con \`/comprar objeto:${id}\`.`
+                ).join("\n\n")
+            )]
+        });
+        return true;
+    }
+
+    if (commandName === "inventario") {
+        await interaction.reply({
+            embeds: [createEconomyEmbed(
+                `🎒 Inventario de ${interaction.user.username}`,
+                [
+                    `**Usos de kit de trabajo:** ${account.inventory.workKitUses}`,
+                    `**Pases de cristal:** ${account.inventory.crystalPasses}`,
+                    "Usa `/trabajar` para gastar un uso del kit; el pase se consume automáticamente al caer en `/puente`."
+                ].join("\n")
+            )]
+        });
+        return true;
+    }
+
+    const itemId = interaction.options.getString("objeto", true);
+    const item = SHOP_ITEMS[itemId];
+    if (!item) {
+        await replyEconomyError(interaction, "Ese objeto no existe en la tienda.");
+        return true;
+    }
+    if (account.balance < item.price) {
+        await replyEconomyError(interaction, `Necesitas ${formatPesos(item.price)} y tienes ${formatPesos(account.balance)}.`);
+        return true;
+    }
+
+    const oldBalance = account.balance;
+    const oldInventory = { ...account.inventory };
+    account.balance -= item.price;
+    if (itemId === "kit_trabajo") account.inventory.workKitUses += WORK_KIT_USES;
+    if (itemId === "pase_cristal") account.inventory.crystalPasses++;
+
+    try {
+        saveEconomyData();
+    } catch (error) {
+        account.balance = oldBalance;
+        account.inventory = oldInventory;
+        console.error("No pude guardar la compra de la tienda:", error);
+        await replyEconomyError(interaction, "No se pudo guardar tu compra. No se te cobró; inténtalo de nuevo.");
+        return true;
+    }
+
+    await interaction.reply({
+        embeds: [createEconomyEmbed(
+            "✅ Compra completada",
+            `Compraste **${item.name}** por ${formatPesos(item.price)}.\nSaldo: **${formatPesos(account.balance)}**\nUsa \`/inventario\` para consultar tus objetos.`
+        )]
+    });
+    return true;
+}
+
+async function handleAdministratorTools(interaction) {
+    if (!["anuncio", "ajustarsaldo"].includes(interaction.commandName)) return false;
+
+    if (!interaction.guild) {
+        await interaction.reply({
+            content: "❌ Este comando solo funciona dentro de un servidor.",
+            ephemeral: true
+        });
+        return true;
+    }
+    if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+        await interaction.reply({
+            content: "❌ Solo los administradores pueden usar este comando.",
+            ephemeral: true
+        });
+        return true;
+    }
+
+    if (interaction.commandName === "anuncio") {
+        const channel = interaction.options.getChannel("canal", true);
+        if (
+            !channel.isTextBased()
+            || typeof channel.send !== "function"
+            || channel.guildId !== interaction.guildId
+        ) {
+            await interaction.reply({
+                content: "❌ Elige un canal de texto de este mismo servidor.",
+                ephemeral: true
+            });
+            return true;
+        }
+
+        try {
+            const announcement = new EmbedBuilder()
+                .setColor(0x7656d6)
+                .setTitle("📢 Anuncio")
+                .setDescription(interaction.options.getString("mensaje", true))
+                .setFooter({ text: `Publicado por ${interaction.user.username}` })
+                .setTimestamp();
+            await interaction.deferReply({ ephemeral: true });
+            await channel.send({
+                embeds: [announcement],
+                allowedMentions: { parse: [] }
+            });
+            await interaction.editReply(`✅ Anuncio publicado en ${channel}.`);
+        } catch (error) {
+            console.error("No pude publicar el anuncio:", error);
+            const errorMessage = "❌ No pude enviar el anuncio. Revisa los permisos del bot en el canal.";
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply(errorMessage);
+            } else {
+                await interaction.reply({ content: errorMessage, ephemeral: true });
+            }
+        }
+        return true;
+    }
+
+    const targetUser = interaction.options.getUser("usuario", true);
+    const adjustment = interaction.options.getInteger("cantidad", true);
+    if (targetUser.bot || adjustment === 0) {
+        await interaction.reply({
+            content: "❌ Elige un usuario que no sea bot y una cantidad distinta de cero.",
+            ephemeral: true
+        });
+        return true;
+    }
+
+    const account = getEconomyAccount(interaction.guild.id, targetUser.id);
+    if (account.balance + adjustment < 0) {
+        await interaction.reply({
+            content: `❌ El saldo no puede quedar negativo. El usuario tiene ${formatPesos(account.balance)}.`,
+            ephemeral: true
+        });
+        return true;
+    }
+    const previousBalance = account.balance;
+    account.balance += adjustment;
+    try {
+        saveEconomyData();
+    } catch (error) {
+        account.balance = previousBalance;
+        console.error("No pude guardar el ajuste de saldo:", error);
+        await interaction.reply({
+            content: "❌ No se pudo guardar el cambio; el saldo no fue modificado.",
+            ephemeral: true
+        });
+        return true;
+    }
+
+    await interaction.reply({
+        embeds: [createEconomyEmbed(
+            "🧾 Saldo actualizado",
+            `Se ${adjustment > 0 ? "añadieron" : "retiraron"} **${formatPesos(Math.abs(adjustment))}** a ${targetUser}.\nSaldo actual: **${formatPesos(account.balance)}**`,
+            0x7656d6
+        )],
+        ephemeral: true,
+        allowedMentions: { parse: [] }
+    });
+    return true;
+}
+
+async function startCrystalBridge(interaction) {
+    const account = getEconomyAccount(interaction.guild.id, interaction.user.id);
+    if (account.balance < CRYSTAL_BRIDGE_ENTRY_FEE) {
+        await replyEconomyError(interaction, `Necesitas ${formatPesos(CRYSTAL_BRIDGE_ENTRY_FEE)} para entrar; tienes ${formatPesos(account.balance)}.`);
+        return;
+    }
+
+    const oldBalance = account.balance;
+    account.balance -= CRYSTAL_BRIDGE_ENTRY_FEE;
+    try {
+        saveEconomyData();
+    } catch (error) {
+        account.balance = oldBalance;
+        console.error("No pude cobrar la entrada del Puente de cristal:", error);
+        await replyEconomyError(interaction, "No se pudo iniciar la partida ni cobrar la entrada. Inténtalo de nuevo.");
+        return;
+    }
+
+    const gameId = interaction.id;
+    let crossedStages = 0;
+    let processing = false;
+    let settled = false;
+    let gameMessage;
+
+    const settle = payout => {
+        if (settled) return false;
+        const balanceBeforePayout = account.balance;
+        account.balance += payout;
+        try {
+            saveEconomyData();
+            settled = true;
+            return true;
+        } catch (error) {
+            account.balance = balanceBeforePayout;
+            console.error("No pude guardar el resultado del Puente de cristal:", error);
+            return false;
+        }
+    };
+
+    try {
+        await interaction.reply({
+            embeds: [createBridgeEmbed(0, "Cruza los ocho tramos o finaliza para recuperar tu entrada.", account)],
+            components: createBridgeButtons(gameId, 0)
+        });
+        gameMessage = await interaction.fetchReply();
+    } catch (error) {
+        console.error("No pude publicar la partida del Puente de cristal:", error);
+        const refunded = settle(CRYSTAL_BRIDGE_ENTRY_FEE);
+        const message = refunded
+            ? "❌ No pude abrir la partida; tu entrada fue devuelta."
+            : "❌ No pude abrir la partida ni devolver la entrada automáticamente. Contacta a un administrador.";
+        try {
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({
+                    embeds: [createEconomyEmbed("⚠️ Partida no disponible", message, 0xd97706)],
+                    components: createBridgeButtons(gameId, 0, true)
+                }).catch(editError => console.error("No pude cerrar el mensaje inicial del Puente:", editError));
+                await interaction.followUp({ content: message, ephemeral: true });
+            } else {
+                await interaction.reply({ content: message, ephemeral: true });
+            }
+        } catch (replyError) {
+            console.error("No pude informar el error al iniciar el Puente:", replyError);
+        }
+        return;
+    }
+    const collector = gameMessage.createMessageComponentCollector({
+        time: 120000,
+        filter: buttonInteraction => buttonInteraction.customId.startsWith(`bridge-${gameId}-`)
+    });
+
+    collector.on("collect", async buttonInteraction => {
+        if (buttonInteraction.user.id !== interaction.user.id) {
+            await buttonInteraction.reply({
+                content: "Esta partida del Puente de cristal pertenece a quien la inició.",
+                ephemeral: true
+            });
+            return;
+        }
+        if (processing || settled) {
+            await buttonInteraction.deferUpdate();
+            return;
+        }
+
+        processing = true;
+        try {
+            const action = buttonInteraction.customId.split("-").at(-1);
+            if (action === "finish") {
+                const payout = crossedStages
+                    ? CRYSTAL_BRIDGE_ENTRY_FEE + crossedStages * CRYSTAL_BRIDGE_STAGE_REWARD
+                    : CRYSTAL_BRIDGE_ENTRY_FEE;
+                if (!settle(payout)) {
+                    await buttonInteraction.reply({
+                        content: "❌ No pude guardar el cobro. Tu partida sigue activa; inténtalo otra vez.",
+                        ephemeral: true
+                    });
+                    return;
+                }
+                collector.stop("finished");
+                await buttonInteraction.update({
+                    embeds: [createEconomyEmbed(
+                        "🏁 Partida finalizada",
+                        `Cobraste **${formatPesos(payout)}**${crossedStages ? ` por superar ${crossedStages} tramo(s)` : "; recuperaste tu entrada"}.\nSaldo: **${formatPesos(account.balance)}**`
+                    )],
+                    components: createBridgeButtons(gameId, crossedStages, true)
+                });
+                return;
+            }
+
+            await buttonInteraction.deferUpdate();
+            const safeSide = Math.random() < 0.5 ? "left" : "right";
+            if (action !== safeSide) {
+                if (account.inventory.crystalPasses > 0) {
+                    account.inventory.crystalPasses--;
+                    try {
+                        saveEconomyData();
+                    } catch (error) {
+                        account.inventory.crystalPasses++;
+                        console.error("No pude guardar el uso del pase de cristal:", error);
+                        await buttonInteraction.followUp({
+                            content: "❌ No pude guardar el uso del pase; no se consumió y la partida sigue activa.",
+                            ephemeral: true
+                        });
+                        return;
+                    }
+                    crossedStages++;
+                    if (crossedStages === CRYSTAL_BRIDGE_STAGES) {
+                        const payout = CRYSTAL_BRIDGE_ENTRY_FEE + crossedStages * CRYSTAL_BRIDGE_STAGE_REWARD;
+                        if (!settle(payout)) {
+                            await buttonInteraction.followUp({
+                                content: "❌ No pude guardar el premio. Contacta a un administrador antes de iniciar otra partida.",
+                                ephemeral: true
+                            });
+                            collector.stop("error");
+                            return;
+                        }
+                        collector.stop("finished");
+                        await gameMessage.edit({
+                            embeds: [createEconomyEmbed(
+                                "🏆 ¡Puente superado!",
+                                `Tu pase te salvó y cruzaste los ocho tramos. Cobraste **${formatPesos(payout)}**.\nSaldo: **${formatPesos(account.balance)}**`
+                            )],
+                            components: createBridgeButtons(gameId, crossedStages, true)
+                        });
+                        return;
+                    }
+                    await gameMessage.edit({
+                        embeds: [createBridgeEmbed(crossedStages, "🛡️ El pase de cristal te salvó: avanzaste, pero ya no tienes otro pase.", account)],
+                        components: createBridgeButtons(gameId, crossedStages)
+                    });
+                    return;
+                }
+
+                settled = true;
+                collector.stop("fell");
+                await gameMessage.edit({
+                    embeds: [createEconomyEmbed(
+                        "💥 ¡Caíste del puente!",
+                        `Elegiste el cristal equivocado y perdiste la entrada de **${formatPesos(CRYSTAL_BRIDGE_ENTRY_FEE)}**.\nSaldo: **${formatPesos(account.balance)}**. Compra un pase en \`/tienda\` para salvar una caída en otra partida.`,
+                        0xc2413b
+                    )],
+                    components: createBridgeButtons(gameId, crossedStages, true)
+                });
+                return;
+            }
+
+            crossedStages++;
+            if (crossedStages === CRYSTAL_BRIDGE_STAGES) {
+                const payout = CRYSTAL_BRIDGE_ENTRY_FEE + crossedStages * CRYSTAL_BRIDGE_STAGE_REWARD;
+                if (!settle(payout)) {
+                    await buttonInteraction.followUp({
+                        content: "❌ No pude guardar el premio. Contacta a un administrador antes de iniciar otra partida.",
+                        ephemeral: true
+                    });
+                    collector.stop("error");
+                    return;
+                }
+                collector.stop("finished");
+                await gameMessage.edit({
+                    embeds: [createEconomyEmbed(
+                        "🏆 ¡Puente superado!",
+                        `Cruzaste los ocho tramos y cobraste **${formatPesos(payout)}**.\nSaldo: **${formatPesos(account.balance)}**`
+                    )],
+                    components: createBridgeButtons(gameId, crossedStages, true)
+                });
+                return;
+            }
+
+            await gameMessage.edit({
+                embeds: [createBridgeEmbed(crossedStages, "✅ ¡Tramo seguro! Sigue adelante o cobra y finaliza.", account)],
+                components: createBridgeButtons(gameId, crossedStages)
+            });
+        } catch (error) {
+            console.error("Falló una ronda del Puente de cristal:", error);
+            const errorMessage = "❌ Ocurrió un error al procesar tu jugada. Si la partida quedó bloqueada, contacta a un administrador.";
+            const notify = buttonInteraction.deferred || buttonInteraction.replied
+                ? buttonInteraction.followUp({ content: errorMessage, ephemeral: true })
+                : buttonInteraction.reply({ content: errorMessage, ephemeral: true });
+            await notify.catch(replyError => console.error("No pude mostrar el error del Puente:", replyError));
+        } finally {
+            processing = false;
+        }
+    });
+
+    collector.on("end", async (_, reason) => {
+        if (settled) return;
+        if (settle(CRYSTAL_BRIDGE_ENTRY_FEE)) {
+            const title = reason === "time"
+                ? "⌛ Puente cerrado por inactividad"
+                : "⚠️ Partida del Puente cerrada";
+            await gameMessage.edit({
+                embeds: [createEconomyEmbed(
+                    title,
+                    `Se te devolvió la entrada de **${formatPesos(CRYSTAL_BRIDGE_ENTRY_FEE)}**; el premio por progreso requiere finalizar manualmente.\nSaldo: **${formatPesos(account.balance)}**`
+                )],
+                components: createBridgeButtons(gameId, crossedStages, true)
+            }).catch(error => console.error("No pude cerrar la partida del Puente:", error));
+        } else {
+            console.error(`No pude devolver la entrada de la partida del Puente de cristal ${gameId}.`);
+            await gameMessage.edit({
+                embeds: [createEconomyEmbed(
+                    "⚠️ No se pudo cerrar la partida",
+                    "No pude guardar la devolución de la entrada. No vuelvas a iniciar otra partida y contacta a un administrador.",
+                    0xd97706
+                )],
+                components: createBridgeButtons(gameId, crossedStages, true)
+            }).catch(error => console.error("No pude mostrar el error al cerrar el Puente:", error));
+        }
+    });
+}
+
 async function handleEconomyCommand(interaction) {
 
-    const economyCommands = ["saldo", "trabajar", "ruleta", "apostar", "robar", "top"];
+    const economyCommands = ["saldo", "trabajar", "ruleta", "apostar", "robar", "top", "puente"];
 
     if (!economyCommands.includes(interaction.commandName)) return false;
 
@@ -1137,6 +1616,11 @@ async function handleEconomyCommand(interaction) {
 
     const guildId = interaction.guild.id;
     const userId = interaction.user.id;
+
+    if (interaction.commandName === "puente") {
+        await startCrystalBridge(interaction);
+        return true;
+    }
 
     if (interaction.commandName === "saldo") {
 
@@ -1165,15 +1649,34 @@ async function handleEconomyCommand(interaction) {
         }
 
         const job = pickRandomMessage(WORK_JOBS);
-        const earnings = Math.floor(Math.random() * (job.maximum - job.minimum + 1)) + job.minimum;
+        const baseEarnings = Math.floor(Math.random() * (job.maximum - job.minimum + 1)) + job.minimum;
+        const usedWorkKit = account.inventory.workKitUses > 0;
+        const earnings = usedWorkKit
+            ? Math.floor(baseEarnings * WORK_KIT_BONUS_MULTIPLIER)
+            : baseEarnings;
+        const previousState = {
+            balance: account.balance,
+            lastWorkAt: account.lastWorkAt,
+            workKitUses: account.inventory.workKitUses
+        };
         account.balance += earnings;
         account.lastWorkAt = now;
-        saveEconomyData();
+        if (usedWorkKit) account.inventory.workKitUses--;
+        try {
+            saveEconomyData();
+        } catch (error) {
+            account.balance = previousState.balance;
+            account.lastWorkAt = previousState.lastWorkAt;
+            account.inventory.workKitUses = previousState.workKitUses;
+            console.error("No pude guardar el resultado del turno:", error);
+            await replyEconomyError(interaction, "No se pudo guardar tu turno; no recibiste el dinero ni se gastó un kit.");
+            return true;
+        }
 
         await interaction.reply({
             embeds: [createEconomyEmbed(
                 "🧰 Turno terminado",
-                `Trabajaste como **${job.name}** y ganaste **${formatPesos(earnings)}**.\n` +
+                `Trabajaste como **${job.name}** y ganaste **${formatPesos(earnings)}**${usedWorkKit ? " (incluye el bono del kit de trabajo)" : ""}.\n` +
                 `💰 Nuevo saldo: **${formatPesos(account.balance)}**`
             )]
         });
@@ -1505,6 +2008,51 @@ let commands = [
         .setDescription("Muestra las 10 mayores fortunas del servidor."),
 
     new SlashCommandBuilder()
+        .setName("puente")
+        .setDescription("Cruza el Puente de cristal por una entrada fija de $100."),
+
+    new SlashCommandBuilder()
+        .setName("tienda")
+        .setDescription("Consulta los objetos que puedes comprar con tu saldo."),
+
+    new SlashCommandBuilder()
+        .setName("comprar")
+        .setDescription("Compra un objeto para mejorar tu economía.")
+        .addStringOption(option =>
+            option
+                .setName("objeto")
+                .setDescription("Objeto que quieres comprar.")
+                .setRequired(true)
+                .addChoices(
+                    { name: "Kit de trabajo ($300)", value: "kit_trabajo" },
+                    { name: "Pase de cristal ($500)", value: "pase_cristal" }
+                )
+        ),
+
+    new SlashCommandBuilder()
+        .setName("inventario")
+        .setDescription("Consulta tus objetos y usos disponibles."),
+
+    new SlashCommandBuilder()
+        .setName("ajustarsaldo")
+        .setDescription("Suma o resta pesos de la cartera de un usuario.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addUserOption(option =>
+            option
+                .setName("usuario")
+                .setDescription("Usuario cuya cartera se actualizará.")
+                .setRequired(true)
+        )
+        .addIntegerOption(option =>
+            option
+                .setName("cantidad")
+                .setDescription("Cantidad positiva para sumar o negativa para restar.")
+                .setRequired(true)
+                .setMinValue(-1000000)
+                .setMaxValue(1000000)
+        ),
+
+    new SlashCommandBuilder()
         .setName("ping")
         .setDescription("Comprueba si el bot está funcionando."),
 
@@ -1518,6 +2066,25 @@ let commands = [
                 .setDescription("Canal donde la comunidad contará en orden.")
                 .setRequired(true)
                 .addChannelTypes(ChannelType.GuildText)
+        ),
+
+    new SlashCommandBuilder()
+        .setName("anuncio")
+        .setDescription("Publica un anuncio en un canal de este servidor.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addChannelOption(option =>
+            option
+                .setName("canal")
+                .setDescription("Canal donde se publicará el anuncio.")
+                .setRequired(true)
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        )
+        .addStringOption(option =>
+            option
+                .setName("mensaje")
+                .setDescription("Contenido del anuncio.")
+                .setRequired(true)
+                .setMaxLength(1800)
         ),
 
     new SlashCommandBuilder()
@@ -1897,11 +2464,16 @@ const HELP_PAGES = [
         title: "💰 Economía · Pesos mexicanos",
         description: [
             "`/saldo [usuario]` Consulta tu cartera. Las cuentas nuevas empiezan con $1,000 MXN.",
-            "`/trabajar` Cobra por un empleo aleatorio. Tiene 1 hora de espera.",
+            "`/trabajar` Cobra por un empleo aleatorio. Tiene 1 hora de espera; el kit aumenta tus ganancias durante tres turnos.",
             "`/ruleta apuesta color` Apuesta al rojo, negro o verde; verde paga 14x.",
             "`/apostar apuesta lado` Juega cara o cruz; acertar devuelve 2x.",
             "`/robar usuario` Tienes 40% de éxito; si fallas, pagas una multa. Espera 3 horas entre intentos.",
-            "`/top` Mira las 10 mayores fortunas de este servidor."
+            "`/top` Mira las 10 mayores fortunas de este servidor.",
+            "`/puente` Paga $100 para cruzar ocho tramos; cada acierto aumenta el cobro en $100. Puedes finalizar cuando quieras; caer sin pase hace perder la entrada.",
+            "`/tienda` Consulta kits de trabajo ($300) y pases de cristal ($500).",
+            "`/comprar objeto` Compra un kit de trabajo o un pase de cristal.",
+            "`/inventario` Consulta los objetos que te quedan.",
+            "`/ajustarsaldo usuario cantidad` Suma o resta saldo a un usuario. Solo administradores."
         ].join("\n\n")
     },
     {
@@ -1918,13 +2490,11 @@ const HELP_PAGES = [
             "`/chiste` Cuenta uno de más de veinte chistes aleatorios.",
             "`/moneda` Lanza una moneda virtual.",
             "`/dado [caras]` Lanza un dado de 2 a 100 caras.",
-            "`/contador canal` Configura un canal para contar números en orden. Solo administradores.",
             "`/avatar [usuario]` Muestra el avatar de una persona.",
             "`/servidor` Muestra información de este servidor.",
             "`/nivel [usuario]` Consulta el nivel y progreso de chat en este servidor.",
             "`/topniveles` Mira el ranking de niveles de este servidor.",
             "`/topchat` Mira quién ha escrito más en este servidor.",
-            "`/sugerencia idea` Envía tu idea para mejorar iCloud.",
             "`/ping` Comprueba la latencia del bot.",
             "`/help` Abre esta guía."
         ].join("\n\n")
@@ -1945,8 +2515,11 @@ const HELP_PAGES = [
         description: [
             "`/conectar canal` Enlaza el canal elegido con los demás canales conectados de otros servidores. Un administrador de cada servidor debe configurarlo; los mensajes se comparten entre todos.",
             "`/sugerencia idea` Envía una idea al equipo de iCloud para que la revise.",
+            "`/anuncio canal mensaje` Publica un anuncio en un canal de este servidor. Solo administradores.",
+            "`/contador canal` Configura un canal para contar números en orden. Solo administradores.",
             "`/chatstats activado` Activa o desactiva niveles y estadísticas del chat. Solo administradores.",
-            "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores."
+            "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores.",
+            "`/presentacion` Publica la presentación de iCloud en su canal configurado. Solo administradores."
         ].join("\n\n")
     }
 ];
@@ -1963,7 +2536,7 @@ function createHelpEmbed(pageIndex) {
         })
         .setTitle(page.title)
         .setDescription(`${page.description}\n\nSelecciona una categoría con los botones para explorar los comandos.`)
-        .setFooter({ text: `Categoría ${pageIndex + 1} de ${HELP_PAGES.length} · Usa /help cuando quieras volver a esta guía` });
+        .setFooter({ text: `Categoría ${pageIndex + 1} de ${HELP_PAGES.length} · Esta guía está disponible cuando la necesites` });
 
     if (page.image) {
         embed.setImage(page.image);
@@ -3415,7 +3988,11 @@ client.on("interactionCreate", async interaction => {
 
     if (await handleConnectChannelCommand(interaction)) return;
 
+    if (await handleShopCommand(interaction)) return;
+
     if (await handleEconomyCommand(interaction)) return;
+
+    if (await handleAdministratorTools(interaction)) return;
 
     if (interaction.commandName === "automod") {
 
