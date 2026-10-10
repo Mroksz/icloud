@@ -107,6 +107,10 @@ const WORK_KIT_BONUS_MULTIPLIER = 1.5;
 const CRYSTAL_PASS_PRICE = 500;
 const MYSTERY_REWARD = 300;
 const MYSTERY_REWARD_COOLDOWN = 60 * 60 * 1000;
+const MEMORY_REWARD = 250;
+const MEMORY_REWARD_COOLDOWN = 30 * 60 * 1000;
+const MEMORY_MISMATCH_DELAY = 900;
+const MEMORY_EMOJIS = ["🍎", "🍋", "🍇", "🍉", "🍒", "🥑", "🐱", "🐸"];
 const MINE_TOOL_USES = 10;
 const EXPEDITION_ENTRY_FEE = 100;
 const EXPEDITION_STAGES = 5;
@@ -871,6 +875,7 @@ function getEconomyAccount(guildId, userId) {
             lastWorkAt: 0,
             lastStealAt: 0,
             lastMysteryRewardAt: 0,
+            lastMemoryRewardAt: 0,
             inventory: {
                 workKitUses: 0,
                 crystalPasses: 0,
@@ -890,6 +895,9 @@ function getEconomyAccount(guildId, userId) {
     }
     if (!Number.isFinite(account.lastMysteryRewardAt) || account.lastMysteryRewardAt < 0) {
         account.lastMysteryRewardAt = 0;
+    }
+    if (!Number.isFinite(account.lastMemoryRewardAt) || account.lastMemoryRewardAt < 0) {
+        account.lastMemoryRewardAt = 0;
     }
     if (!Number.isSafeInteger(account.inventory.crystalPasses) || account.inventory.crystalPasses < 0) {
         account.inventory.crystalPasses = 0;
@@ -2705,6 +2713,10 @@ let commands = [
         .setDescription("Investiga un caso, reúne pistas y descubre quién fue."),
 
     new SlashCommandBuilder()
+        .setName("memorama")
+        .setDescription("Encuentra todas las parejas de emojis y gana pesos."),
+
+    new SlashCommandBuilder()
         .setName("chatstats")
         .setDescription("Activa o desactiva niveles y estadísticas del chat en este servidor.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
@@ -3035,6 +3047,7 @@ const HELP_PAGES = [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
             "`/akinator` Piensa en alguien o algo y responde hasta que Akinator adivine.",
             "`/misterio` Investiga un caso y gana $300 al resolverlo correctamente; hay un tiempo de espera de una hora entre premios.",
+            "`/memorama` Encuentra las ocho parejas de emojis con botones. Muestra movimientos, parejas y tiempo; al completar el tablero puedes ganar $250 (un premio cada 30 minutos).",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/superpoder` Descubre un poder absurdo con un efecto secundario peor.",
@@ -4421,6 +4434,207 @@ async function handleSuggestionDecision(interaction) {
 
 }
 
+function createMemoryBoardEmbed(state, status = "Voltea dos cartas por turno y encuentra las ocho parejas.") {
+    const elapsedSeconds = Math.floor((Date.now() - state.startedAt) / 1000);
+    return createEconomyEmbed(
+        "🧠 Memorama de iCloud",
+        [
+            "Encuentra las ocho parejas. Cada dos cartas que compares cuentan como un movimiento.",
+            `**Movimientos:** ${state.moves} · **Parejas:** ${state.matched.size / 2} / ${MEMORY_EMOJIS.length}`,
+            `**Tiempo:** ${elapsedSeconds} s`,
+            "",
+            status
+        ].join("\n"),
+        state.matched.size === state.cards.length ? 0x2f9e8f : 0x7656d6
+    );
+}
+
+function createMemoryBoardButtons(gameId, state, disabled = false) {
+    const buttons = state.cards.map((emoji, index) => {
+        const isMatched = state.matched.has(index);
+        const isRevealed = state.selected.includes(index) || isMatched;
+        return new ButtonBuilder()
+            .setCustomId(`memory-${gameId}-${index}`)
+            .setLabel(isRevealed ? emoji : "❔")
+            .setStyle(isMatched
+                ? ButtonStyle.Success
+                : isRevealed
+                    ? ButtonStyle.Primary
+                    : ButtonStyle.Secondary)
+            .setDisabled(disabled || isMatched);
+    });
+
+    return Array.from({ length: 4 }, (_, rowIndex) =>
+        new ActionRowBuilder().addComponents(
+            ...buttons.slice(rowIndex * 4, rowIndex * 4 + 4)
+        )
+    );
+}
+
+async function startMemoryGame(interaction) {
+    if (!interaction.guild) {
+        await interaction.reply({
+            content: "❌ El memorama solo está disponible dentro de un servidor.",
+            ephemeral: true
+        });
+        return;
+    }
+
+    const cards = [...MEMORY_EMOJIS, ...MEMORY_EMOJIS];
+    for (let index = cards.length - 1; index > 0; index--) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [cards[index], cards[randomIndex]] = [cards[randomIndex], cards[index]];
+    }
+    const state = {
+        cards,
+        selected: [],
+        matched: new Set(),
+        moves: 0,
+        startedAt: Date.now()
+    };
+    const gameId = interaction.id;
+
+    await interaction.reply({
+        embeds: [createMemoryBoardEmbed(state)],
+        components: createMemoryBoardButtons(gameId, state)
+    });
+    const gameMessage = await interaction.fetchReply();
+    const collector = gameMessage.createMessageComponentCollector({
+        time: 240000,
+        filter: buttonInteraction =>
+            buttonInteraction.customId.startsWith(`memory-${gameId}-`)
+    });
+    let processing = false;
+
+    collector.on("collect", async buttonInteraction => {
+        if (buttonInteraction.user.id !== interaction.user.id) {
+            await buttonInteraction.reply({
+                content: "Esta partida de memorama pertenece a quien la inició.",
+                ephemeral: true
+            });
+            return;
+        }
+        if (processing) {
+            await buttonInteraction.deferUpdate();
+            return;
+        }
+
+        const index = Number(buttonInteraction.customId.slice(`memory-${gameId}-`.length));
+        if (
+            !Number.isInteger(index)
+            || index < 0
+            || index >= state.cards.length
+            || state.matched.has(index)
+            || state.selected.includes(index)
+        ) {
+            await buttonInteraction.reply({
+                content: "Esa carta ya está volteada. Elige otra.",
+                ephemeral: true
+            });
+            return;
+        }
+
+        processing = true;
+        try {
+            state.selected.push(index);
+            if (state.selected.length < 2) {
+                await buttonInteraction.update({
+                    embeds: [createMemoryBoardEmbed(state, "Primera carta revelada. Elige una segunda.")],
+                    components: createMemoryBoardButtons(gameId, state)
+                });
+                return;
+            }
+
+            state.moves++;
+            const [firstIndex, secondIndex] = state.selected;
+            const isMatch = state.cards[firstIndex] === state.cards[secondIndex];
+            if (isMatch) {
+                state.matched.add(firstIndex);
+                state.matched.add(secondIndex);
+            }
+
+            const allMatched = state.matched.size === state.cards.length;
+            if (allMatched) {
+                const account = getEconomyAccount(interaction.guild.id, interaction.user.id);
+                const now = Date.now();
+                const cooldownRemaining = MEMORY_REWARD_COOLDOWN
+                    - (now - account.lastMemoryRewardAt);
+                let result;
+                if (cooldownRemaining > 0) {
+                    result = `¡Completaste el tablero! Ya recibiste una recompensa recientemente; podrás ganar otra en ${Math.ceil(cooldownRemaining / 60000)} min.`;
+                } else {
+                    const previousBalance = account.balance;
+                    const previousRewardAt = account.lastMemoryRewardAt;
+                    account.balance += MEMORY_REWARD;
+                    account.lastMemoryRewardAt = now;
+                    try {
+                        saveEconomyData();
+                        result = `🏆 ¡Memorama completado! Ganaste **${formatPesos(MEMORY_REWARD)}** en **${state.moves} movimientos** y ${Math.floor((now - state.startedAt) / 1000)} segundos.\nNuevo saldo: **${formatPesos(account.balance)}**`;
+                    } catch (error) {
+                        account.balance = previousBalance;
+                        account.lastMemoryRewardAt = previousRewardAt;
+                        console.error("No pude guardar el premio del memorama:", error);
+                        result = "Completaste el tablero, pero no pude guardar el premio. Contacta a un administrador.";
+                    }
+                }
+
+                collector.stop("completed");
+                await buttonInteraction.update({
+                    embeds: [createMemoryBoardEmbed(state, result)],
+                    components: createMemoryBoardButtons(gameId, state, true)
+                });
+                return;
+            }
+
+            if (isMatch) {
+                state.selected = [];
+                await buttonInteraction.update({
+                    embeds: [createMemoryBoardEmbed(state, "✅ ¡Pareja encontrada! Elige otras dos cartas.")],
+                    components: createMemoryBoardButtons(gameId, state)
+                });
+                collector.resetTimer();
+                return;
+            }
+
+            await buttonInteraction.update({
+                embeds: [createMemoryBoardEmbed(state, "❌ No coinciden; recuerda las cartas. Se ocultarán en un instante.")],
+                components: createMemoryBoardButtons(gameId, state)
+            });
+            await new Promise(resolve => setTimeout(resolve, MEMORY_MISMATCH_DELAY));
+            state.selected = [];
+            await gameMessage.edit({
+                embeds: [createMemoryBoardEmbed(state)],
+                components: createMemoryBoardButtons(gameId, state)
+            });
+            collector.resetTimer();
+        } catch (error) {
+            console.error("Falló una jugada del memorama:", error);
+            const message = "❌ No pude actualizar el tablero. Intenta otra vez o inicia una nueva partida con `/memorama`.";
+            const notify = buttonInteraction.deferred || buttonInteraction.replied
+                ? buttonInteraction.followUp({ content: message, ephemeral: true })
+                : buttonInteraction.reply({ content: message, ephemeral: true });
+            await notify.catch(replyError =>
+                console.error("No pude mostrar el error del memorama:", replyError)
+            );
+        } finally {
+            processing = false;
+        }
+    });
+
+    collector.on("end", (_, reason) => {
+        if (reason === "completed") return;
+        void gameMessage.edit({
+            embeds: [createMemoryBoardEmbed(
+                state,
+                `⌛ Se acabó el tiempo. Encontraste **${state.matched.size / 2} de ${MEMORY_EMOJIS.length} parejas** en ${state.moves} movimientos.`
+            )],
+            components: createMemoryBoardButtons(gameId, state, true)
+        }).catch(error => {
+            console.error("No pude cerrar el tablero del memorama:", error);
+        });
+    });
+}
+
 client.on("interactionCreate", async interaction => {
 
     if (interaction.isButton() && interaction.customId.startsWith("suggestion:")) {
@@ -5008,6 +5222,11 @@ client.on("interactionCreate", async interaction => {
 
         });
 
+        return;
+    }
+
+    if (interaction.commandName === "memorama") {
+        await startMemoryGame(interaction);
         return;
     }
 
