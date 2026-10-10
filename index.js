@@ -2407,6 +2407,7 @@ client.on("messageCreate", async message => {
     if (await handleCounterMessage(message)) return;
 
     const botReplyType = message.guild.id === PERSONALITY_GUILD_ID
+        && message.channel.id === CHAT_CHANNEL_ID
         ? getBotReplyType(message)
         : null;
 
@@ -2421,14 +2422,14 @@ client.on("messageCreate", async message => {
                 const replyEmoji = pickRandomMessage(BOT_GIF_REPLY_EMOJIS);
                 await message.channel.send(`${replyEmoji} ${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${gifUrl}`);
             } else {
-                const botReply = await message.channel.send(
+                await message.channel.send(
                     pickRandomMessage(BOT_MENTION_MESSAGES)
                 );
 
                 try {
-                    await botReply.react("1531564951049732107");
+                    await message.react("<:sunglas:1531564951049732107>");
                 } catch (error) {
-                    console.error("No pude reaccionar a mi respuesta:", error);
+                    console.error("No pude reaccionar al mensaje que menciona al bot:", error);
                 }
             }
 
