@@ -1408,7 +1408,7 @@ let commands = [
 
     new SlashCommandBuilder()
         .setName("help")
-        .setDescription("Muestra los comandos del bot."),
+        .setDescription("Muestra los comandos del bot organizados por categorías."),
 
     new SlashCommandBuilder()
         .setName("gato")
@@ -1736,17 +1736,22 @@ const HELP_PAGES = [
         ].join("\n\n")
     },
     {
-        title: "Moderación: requiere permisos",
+        title: "🛡️ Moderación",
         description: [
-            "Solo miembros con el permiso indicado pueden usar estos comandos. Los administradores también tienen acceso.",
+            "Estos comandos requieren permisos de Discord. Los administradores también tienen acceso.",
             "`/clear cantidad` Elimina de 1 a 100 mensajes. Requiere Gestionar mensajes.",
             "`/kick usuario [razon]` Expulsa a una persona. Requiere Expulsar miembros.",
             "`/ban usuario [razon]` Banea a una persona. Requiere Banear miembros.",
             "`/timeout usuario minutos [razon]` Aplica un timeout. Requiere Moderar miembros.",
-            "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores.",
-            "`/conectar canal` Conecta un canal al chat comunitario. Solo administradores.",
+        ].join("\n\n")
+    },
+    {
+        title: "🌐 Comunidad y configuración",
+        description: [
+            "`/conectar canal` Enlaza el canal elegido con los demás canales conectados de otros servidores. Un administrador de cada servidor debe configurarlo; los mensajes se comparten entre todos.",
             "`/gifrespuestas activado` Enciende o apaga las respuestas con GIF. Solo administradores.",
-            "`/chatstats activado` Activa o desactiva niveles y estadísticas del chat. Solo administradores."
+            "`/chatstats activado` Activa o desactiva niveles y estadísticas del chat. Solo administradores.",
+            "`/darrol usuario rol [minutos]` Asigna un rol; sin minutos es permanente. Solo administradores."
         ].join("\n\n")
     }
 ];
@@ -1756,10 +1761,14 @@ function createHelpEmbed(pageIndex) {
     const page = HELP_PAGES[pageIndex];
 
     return new EmbedBuilder()
-        .setColor(0x2f9e8f)
+        .setColor(0x7656d6)
+        .setAuthor({
+            name: "iCloud · Centro de ayuda",
+            iconURL: client.user.displayAvatarURL()
+        })
         .setTitle(page.title)
-        .setDescription(page.description)
-        .setFooter({ text: `📖 Página ${pageIndex + 1} de ${HELP_PAGES.length}` });
+        .setDescription(`${page.description}\n\nSelecciona una categoría con los botones para explorar los comandos.`)
+        .setFooter({ text: `Categoría ${pageIndex + 1} de ${HELP_PAGES.length} · Usa /help cuando quieras volver a esta guía` });
 
 }
 
@@ -1767,16 +1776,13 @@ function createHelpButtons(pageIndex, interactionId, disabled = false) {
 
     return [
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`help-${interactionId}-previous`)
-                .setLabel("◀️ Anterior")
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(disabled || pageIndex === 0),
-            new ButtonBuilder()
-                .setCustomId(`help-${interactionId}-next`)
-                .setLabel("Siguiente ▶️")
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(disabled || pageIndex === HELP_PAGES.length - 1)
+            ...HELP_PAGES.map((page, index) =>
+                new ButtonBuilder()
+                    .setCustomId(`help-${interactionId}-category-${index}`)
+                    .setLabel(page.title)
+                    .setStyle(index === pageIndex ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setDisabled(disabled)
+            )
         )
     ];
 
@@ -1836,7 +1842,8 @@ function createGuildWelcomeEmbed(guild) {
         .setTitle("✨ ¡Gracias por invitar a iCloud! ✨")
         .setDescription(
             `¡Hola, **${guild.name}**! Estoy listo para traer juegos y diversión a esta comunidad.\n\n` +
-            "Empieza con uno de estos comandos y usa **/help** para ver la lista completa."
+            "Empieza con uno de estos comandos y usa **/help** para ver la lista completa.\n\n" +
+            "🌐 **¿Quieren hacer alianza con otros servidores?** Un administrador puede usar `/conectar canal` para enlazar un canal y compartir mensajes con los demás servidores conectados."
         )
         .addFields({
             name: "🎮 Comandos para empezar",
@@ -3488,9 +3495,19 @@ client.on("interactionCreate", async interaction => {
                 });
             }
 
-            pageIndex = buttonInteraction.customId.endsWith("next")
-                ? Math.min(pageIndex + 1, HELP_PAGES.length - 1)
-                : Math.max(pageIndex - 1, 0);
+            const selectedCategory = Number(buttonInteraction.customId.split("-").at(-1));
+            if (
+                !Number.isInteger(selectedCategory)
+                || selectedCategory < 0
+                || selectedCategory >= HELP_PAGES.length
+            ) {
+                return buttonInteraction.reply({
+                    content: "No reconocí esa categoría. Vuelve a usar `/help`.",
+                    ephemeral: true
+                });
+            }
+
+            pageIndex = selectedCategory;
 
             await buttonInteraction.update({
                 embeds: [createHelpEmbed(pageIndex)],
