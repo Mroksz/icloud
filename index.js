@@ -2892,6 +2892,15 @@ let commands = [
         ),
 
     new SlashCommandBuilder()
+        .setName("desconectar")
+        .setDescription("Desconecta este servidor del chat comunitario.")
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+    new SlashCommandBuilder()
+        .setName("invitacion")
+        .setDescription("Obtén el enlace para invitar a iCloud a otro servidor."),
+
+    new SlashCommandBuilder()
         .setName("presentacion")
         .setDescription("Publica la presentación de iCloud con sus comandos destacados.")
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
@@ -3080,6 +3089,8 @@ const HELP_PAGES = [
         title: "🌐 Comunidad y configuración",
         description: [
             "`/conectar canal` Enlaza el canal elegido con los demás canales conectados de otros servidores. Un administrador de cada servidor debe configurarlo; los mensajes se comparten entre todos.",
+            "`/desconectar` Desconecta este servidor del chat comunitario. Solo administradores.",
+            "`/invitacion` Muestra el enlace para invitar a iCloud a otro servidor.",
             "`/sugerencia idea` Envía una idea al equipo de iCloud para que la revise.",
             "`/anuncio canal mensaje` Publica un anuncio en un canal de este servidor. Solo administradores.",
             "`/contador canal` Configura un canal para contar números en orden. Solo administradores.",
@@ -4021,9 +4032,42 @@ function formatCommandOption(option) {
     return `• ${option.name}: ${value ?? "—"}`;
 }
 
-async function handleConnectChannelCommand(interaction) {
+async function announceCommunityConnection(guild, channelId, connected) {
 
-    if (interaction.commandName !== "conectar") return false;
+    const destinationIds = new Set([
+        COMMUNITY_CHANNEL_ID,
+        ...Object.values(connectedChannels),
+        channelId
+    ]);
+    const message = connected
+        ? `🌐 **${guild.name}** se conectó al chat comunitario desde <#${channelId}>. ¡Ya puede compartir mensajes con los demás servidores!`
+        : `🌐 **${guild.name}** se desconectó del chat comunitario.`;
+    const failedChannelIds = [];
+
+    await Promise.all([...destinationIds].map(async destinationId => {
+        try {
+            const destination = await client.channels.fetch(destinationId);
+
+            if (!destination?.isTextBased() || !("send" in destination)) {
+                throw new Error(`El canal ${destinationId} no admite mensajes.`);
+            }
+
+            await destination.send({
+                content: message,
+                allowedMentions: { parse: [] }
+            });
+        } catch (error) {
+            failedChannelIds.push(destinationId);
+            console.error(`No pude anunciar la conexión comunitaria en el canal ${destinationId}:`, error);
+        }
+    }));
+
+    return failedChannelIds.length;
+}
+
+async function handleCommunityConnectionCommand(interaction) {
+
+    if (!["conectar", "desconectar"].includes(interaction.commandName)) return false;
 
     if (!interaction.guild) {
         await interaction.reply({
@@ -4035,7 +4079,7 @@ async function handleConnectChannelCommand(interaction) {
 
     if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
         await interaction.reply({
-            content: "❌ Solo los administradores pueden conectar un canal.",
+            content: "❌ Solo los administradores pueden cambiar la conexión comunitaria.",
             ephemeral: true
         });
         return true;
@@ -4043,8 +4087,36 @@ async function handleConnectChannelCommand(interaction) {
 
     await interaction.deferReply({ ephemeral: true });
 
+    const guild = interaction.guild;
+
+    if (interaction.commandName === "desconectar") {
+        const previousChannelId = connectedChannels[guild.id];
+
+        if (!previousChannelId) {
+            return interaction.editReply("ℹ️ Este servidor no tiene un canal conectado al chat comunitario.");
+        }
+
+        delete connectedChannels[guild.id];
+
+        try {
+            saveConnectedChannels();
+        } catch (error) {
+            connectedChannels[guild.id] = previousChannelId;
+            console.error(`No pude desconectar el servidor ${guild.name} del chat comunitario:`, error);
+            return interaction.editReply("❌ No pude guardar el cambio. El servidor continúa conectado; inténtalo de nuevo.");
+        }
+
+        const failedAnnouncements = await announceCommunityConnection(guild, previousChannelId, false);
+        const announcementWarning = failedAnnouncements
+            ? ` No pude publicar el aviso en ${failedAnnouncements} canal(es) conectado(s); revisa los permisos del bot.`
+            : "";
+
+        return interaction.editReply(
+            `✅ El canal <#${previousChannelId}> quedó desconectado del chat comunitario.${announcementWarning}`
+        );
+    }
+
     try {
-        const guild = interaction.guild;
         const selectedChannel = interaction.options.getChannel("canal", true);
 
         if (selectedChannel.guildId !== guild.id) {
@@ -4107,8 +4179,13 @@ async function handleConnectChannelCommand(interaction) {
             throw error;
         }
 
+        const failedAnnouncements = await announceCommunityConnection(guild, selectedChannel.id, true);
+        const announcementWarning = failedAnnouncements
+            ? ` No pude publicar el aviso en ${failedAnnouncements} canal(es) conectado(s); revisa los permisos del bot.`
+            : "";
+
         return interaction.editReply(
-            `✅ ${selectedChannel} quedó conectado al chat comunitario. Los mensajes de este canal se compartirán en el canal principal y los demás canales conectados.`
+            `✅ ${selectedChannel} quedó conectado al chat comunitario. Los mensajes de este canal se compartirán en el canal principal y los demás canales conectados.${announcementWarning}`
         );
     } catch (error) {
         console.error("No pude conectar el canal al chat comunitario:", error);
@@ -4648,6 +4725,25 @@ client.on("interactionCreate", async interaction => {
 
     if (await handleCounterSetupCommand(interaction)) return;
 
+    if (interaction.commandName === "invitacion") {
+        const inviteEmbed = new EmbedBuilder()
+            .setColor(0x7656d6)
+            .setTitle("➕ Invita a iCloud")
+            .setDescription("Añade iCloud a otro servidor y disfruta de sus juegos, utilidades y funciones comunitarias.");
+        const inviteButton = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setLabel("Invitar a iCloud")
+                .setStyle(ButtonStyle.Link)
+                .setURL(BOT_INVITE_URL)
+        );
+
+        return interaction.reply({
+            embeds: [inviteEmbed],
+            components: [inviteButton],
+            ephemeral: true
+        });
+    }
+
     if (interaction.commandName === "sugerencia") {
         return handleSuggestionCommand(interaction);
     }
@@ -4753,7 +4849,7 @@ client.on("interactionCreate", async interaction => {
         }
     }
 
-    if (await handleConnectChannelCommand(interaction)) return;
+    if (await handleCommunityConnectionCommand(interaction)) return;
 
     if (await handleShopCommand(interaction)) return;
 
