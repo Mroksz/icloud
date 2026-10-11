@@ -110,7 +110,16 @@ const MYSTERY_REWARD_COOLDOWN = 60 * 60 * 1000;
 const MEMORY_REWARD = 250;
 const MEMORY_REWARD_COOLDOWN = 30 * 60 * 1000;
 const MEMORY_MISMATCH_DELAY = 900;
-const MEMORY_EMOJIS = ["🍎", "🍋", "🍇", "🍉", "🍒", "🥑", "🐱", "🐸"];
+const MEMORY_EMOJIS = ["🍎", "🍋", "🍇", "🍉", "🍒", "🥑", "🐱", "🐸", "🐶", "🦊", "🐼", "🐵"];
+const MEMORY_MODES = {
+    facil: { name: "Fácil", pairs: 8, timeLimit: 240000, reward: MEMORY_REWARD },
+    intermedio: { name: "Intermedio", pairs: 10, timeLimit: 240000, reward: 600 },
+    dificil: { name: "Difícil", pairs: 12, timeLimit: 150000, reward: 1800, entryFee: 300 }
+};
+const HANGMAN_REWARD = 300;
+const HANGMAN_REWARD_COOLDOWN = 15 * 60 * 1000;
+const TRIVIA_REWARD_COOLDOWN = 15 * 60 * 1000;
+const TRIVIA_QUESTION_TIME = 20000;
 const MINE_TOOL_USES = 10;
 const EXPEDITION_ENTRY_FEE = 100;
 const EXPEDITION_STAGES = 5;
@@ -876,6 +885,8 @@ function getEconomyAccount(guildId, userId) {
             lastStealAt: 0,
             lastMysteryRewardAt: 0,
             lastMemoryRewardAt: 0,
+            lastHangmanRewardAt: 0,
+            lastTriviaRewardAt: 0,
             inventory: {
                 workKitUses: 0,
                 crystalPasses: 0,
@@ -898,6 +909,12 @@ function getEconomyAccount(guildId, userId) {
     }
     if (!Number.isFinite(account.lastMemoryRewardAt) || account.lastMemoryRewardAt < 0) {
         account.lastMemoryRewardAt = 0;
+    }
+    if (!Number.isFinite(account.lastHangmanRewardAt) || account.lastHangmanRewardAt < 0) {
+        account.lastHangmanRewardAt = 0;
+    }
+    if (!Number.isFinite(account.lastTriviaRewardAt) || account.lastTriviaRewardAt < 0) {
+        account.lastTriviaRewardAt = 0;
     }
     if (!Number.isSafeInteger(account.inventory.crystalPasses) || account.inventory.crystalPasses < 0) {
         account.inventory.crystalPasses = 0;
@@ -2412,7 +2429,17 @@ const WELCOME_MESSAGES = [
     (memberId, emoji) => `¡Llegó <@${memberId}>! Ponte cómodo; el bot ya estaba hablando solo. ${emoji}`,
     (memberId, emoji) => `${emoji} ¡Bienvenido a bordo, <@${memberId}>! La cordura es opcional y el caos viene incluido.`,
     (memberId, emoji) => `¡Se sumó <@${memberId}>! Ahora somos oficialmente más que los errores del bot. ${emoji}`,
-    (memberId, emoji) => `${emoji} ¡Hola, <@${memberId}>! Si el bot te saluda primero, no significa que sepa lo que hace.`
+    (memberId, emoji) => `${emoji} ¡Hola, <@${memberId}>! Si el bot te saluda primero, no significa que sepa lo que hace.`,
+    (memberId, emoji) => `¡Atención, llegó <@${memberId}>! La misión de encontrar los snacks empieza ahora. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Qué bueno que llegaste, <@${memberId}>! Elige un canal y finge que siempre supiste dónde estaba.`,
+    (memberId, emoji) => `¡<@${memberId}> acaba de entrar! La fiesta puede comenzar y el bot ya encontró el botón de confeti. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Bienvenido, <@${memberId}>! Hay juegos, charlas y al menos una persona que tampoco sabe qué hace.`,
+    (memberId, emoji) => `¡Nuevo integrante detectado: <@${memberId}>! Nivel de bienvenida: máximo. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Pasa, <@${memberId}>! Tenemos sitio, buena onda y un bot con demasiados botones.`,
+    (memberId, emoji) => `El servidor acaba de subir de nivel: llegó <@${memberId}>. ¡Bienvenido! ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Hola, <@${memberId}>! Tu llegada fue aprobada por el comité imaginario del caos.`,
+    (memberId, emoji) => `¡<@${memberId}> se une a la aventura! Que empiece la búsqueda del mejor canal. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Bienvenido a la comunidad, <@${memberId}>! Las buenas conversaciones y los memes te esperan.`
 ];
 
 function pickRandomMessage(messages) {
@@ -2714,7 +2741,26 @@ let commands = [
 
     new SlashCommandBuilder()
         .setName("memorama")
-        .setDescription("Encuentra todas las parejas de emojis y gana pesos."),
+        .setDescription("Encuentra parejas de emojis y gana pesos según la dificultad.")
+        .addStringOption(option =>
+            option
+                .setName("dificultad")
+                .setDescription("Elige el tamaño del tablero y el reto.")
+                .setRequired(false)
+                .addChoices(
+                    { name: "Fácil · 8 parejas", value: "facil" },
+                    { name: "Intermedio · 10 parejas", value: "intermedio" },
+                    { name: "Difícil · 12 parejas, 2:30 min y depósito de $300", value: "dificil" }
+                )
+        ),
+
+    new SlashCommandBuilder()
+        .setName("ahorcado")
+        .setDescription("Adivina una palabra secreta antes de quedarte sin intentos y gana pesos."),
+
+    new SlashCommandBuilder()
+        .setName("trivia")
+        .setDescription("Responde cinco preguntas de cultura general y gana pesos."),
 
     new SlashCommandBuilder()
         .setName("chatstats")
@@ -3056,7 +3102,9 @@ const HELP_PAGES = [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
             "`/akinator` Piensa en alguien o algo y responde hasta que Akinator adivine.",
             "`/misterio` Investiga un caso y gana $300 al resolverlo correctamente; hay un tiempo de espera de una hora entre premios.",
-            "`/memorama` Encuentra las ocho parejas de emojis con botones. Muestra movimientos, parejas y tiempo; al completar el tablero puedes ganar $250 (un premio cada 30 minutos).",
+            "`/memorama dificultad` Elige fácil (8 parejas, $250), intermedio (10 parejas, $600) o difícil (12 parejas, hasta $1,800 en 2:30 min; cobra $300 de depósito y lo pierdes si se acaba el tiempo). Los premios tienen 30 minutos de espera.",
+            "`/ahorcado` Adivina una palabra con hasta 6 errores; al ganar recibes $300 (un premio cada 15 minutos).",
+            "`/trivia` Responde 5 preguntas de cultura general. Ganas $150 por acierto y $250 extra por una ronda perfecta; premio cada 15 minutos.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/superpoder` Descubre un poder absurdo con un efecto secundario peor.",
@@ -4511,14 +4559,462 @@ async function handleSuggestionDecision(interaction) {
 
 }
 
-function createMemoryBoardEmbed(state, status = "Voltea dos cartas por turno y encuentra las ocho parejas.") {
-    const elapsedSeconds = Math.floor((Date.now() - state.startedAt) / 1000);
+const activeMemoryGames = new Set();
+
+const HANGMAN_WORDS = [
+    { word: "astronauta", hint: "Persona que viaja al espacio" },
+    { word: "biblioteca", hint: "Lugar donde se guardan y prestan libros" },
+    { word: "brujula", hint: "Instrumento que indica el norte" },
+    { word: "cangrejo", hint: "Animal marino que camina de lado" },
+    { word: "chocolate", hint: "Dulce hecho con cacao" },
+    { word: "dinosaurio", hint: "Reptil prehistorico de gran tamano" },
+    { word: "escalera", hint: "Se usa para subir o bajar entre niveles" },
+    { word: "guitarra", hint: "Instrumento musical de cuerdas" },
+    { word: "helicoptero", hint: "Aeronave que despega verticalmente" },
+    { word: "laberinto", hint: "Red de caminos con una salida" },
+    { word: "mariposa", hint: "Insecto con alas coloridas" },
+    { word: "murcielago", hint: "Mamifero que suele volar de noche" },
+    { word: "paraguas", hint: "Protege de la lluvia" },
+    { word: "planeta", hint: "Cuerpo celeste que orbita una estrella" },
+    { word: "serpiente", hint: "Reptil alargado que no tiene patas" },
+    { word: "telescopio", hint: "Instrumento para observar objetos lejanos del cielo" },
+    { word: "tormenta", hint: "Lluvia intensa con viento y a veces truenos" },
+    { word: "volcan", hint: "Montana que puede expulsar lava" },
+    { word: "zanahoria", hint: "Raiz naranja que suele comer el conejo" },
+    { word: "cocodrilo", hint: "Reptil grande que vive cerca del agua" }
+];
+const TRIVIA_QUESTIONS = [
+    { question: "¿Cuál es el planeta más grande del sistema solar?", options: ["Júpiter", "Marte", "Venus", "Mercurio"], answer: "Júpiter" },
+    { question: "¿Cuántos lados tiene un hexágono?", options: ["Seis", "Cinco", "Siete", "Ocho"], answer: "Seis" },
+    { question: "¿Cuál es la capital de Japón?", options: ["Tokio", "Kioto", "Osaka", "Nagoya"], answer: "Tokio" },
+    { question: "¿Qué gas absorben principalmente las plantas para la fotosíntesis?", options: ["Dióxido de carbono", "Oxígeno", "Helio", "Hidrógeno"], answer: "Dióxido de carbono" },
+    { question: "¿Cuántos minutos tiene una hora?", options: ["60", "50", "70", "100"], answer: "60" },
+    { question: "¿Cuál es el océano más grande?", options: ["Pacífico", "Atlántico", "Índico", "Ártico"], answer: "Pacífico" },
+    { question: "¿Qué instrumento mide la temperatura?", options: ["Termómetro", "Barómetro", "Brújula", "Cronómetro"], answer: "Termómetro" },
+    { question: "¿En qué continente está Egipto?", options: ["África", "Asia", "Europa", "Oceanía"], answer: "África" },
+    { question: "¿Cuál es el resultado de 9 × 7?", options: ["63", "56", "72", "49"], answer: "63" },
+    { question: "¿Qué animal es el mamífero más grande del mundo?", options: ["Ballena azul", "Elefante africano", "Jirafa", "Orca"], answer: "Ballena azul" },
+    { question: "¿Cuántos colores tiene tradicionalmente el arcoíris?", options: ["Siete", "Seis", "Cinco", "Ocho"], answer: "Siete" },
+    { question: "¿Qué órgano bombea la sangre por el cuerpo?", options: ["El corazón", "El hígado", "El pulmón", "El riñón"], answer: "El corazón" },
+    { question: "¿Cuál es el metal cuyo símbolo químico es Au?", options: ["Oro", "Plata", "Cobre", "Aluminio"], answer: "Oro" },
+    { question: "¿En qué país se encuentra la Torre Eiffel?", options: ["Francia", "Italia", "España", "Bélgica"], answer: "Francia" },
+    { question: "¿Qué idioma se habla principalmente en Brasil?", options: ["Portugués", "Español", "Francés", "Italiano"], answer: "Portugués" },
+    { question: "¿Cuántas patas tiene una araña?", options: ["Ocho", "Seis", "Diez", "Doce"], answer: "Ocho" },
+    { question: "¿Cuál es el satélite natural de la Tierra?", options: ["La Luna", "Fobos", "Europa", "Titán"], answer: "La Luna" },
+    { question: "¿Qué estación viene después del verano en el hemisferio norte?", options: ["Otoño", "Primavera", "Invierno", "Monzón"], answer: "Otoño" },
+    { question: "¿Cuál es el proceso por el que el agua líquida se convierte en vapor?", options: ["Evaporación", "Condensación", "Congelación", "Fusión"], answer: "Evaporación" },
+    { question: "¿Cuántos días tiene un año bisiesto?", options: ["366", "365", "364", "360"], answer: "366" }
+];
+const HANGMAN_DRAWINGS = [
+    " +---+\n     |\n     |\n     |\n    ===",
+    " +---+\n O   |\n     |\n     |\n    ===",
+    " +---+\n O   |\n |   |\n     |\n    ===",
+    " +---+\n O   |\n/|   |\n     |\n    ===",
+    " +---+\n O   |\n/|\\  |\n     |\n    ===",
+    " +---+\n O   |\n/|\\  |\n/    |\n    ===",
+    " +---+\n O   |\n/|\\  |\n/ \\  |\n    ==="
+];
+const activeWordGames = new Set();
+
+function shuffleItems(items) {
+    const shuffled = [...items];
+    for (let index = shuffled.length - 1; index > 0; index--) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+    }
+    return shuffled;
+}
+
+function awardMinigameReward(guildId, userId, rewardField, cooldown, reward, gameName) {
+    let account;
+    try {
+        account = getEconomyAccount(guildId, userId);
+    } catch (error) {
+        console.error(`No pude cargar la cuenta para la recompensa de ${gameName}:`, error);
+        return {
+            rewarded: false,
+            message: "No pude cargar tu cuenta para guardar el premio. Contacta a un administrador."
+        };
+    }
+    const now = Date.now();
+    const cooldownRemaining = cooldown - (now - account[rewardField]);
+
+    if (cooldownRemaining > 0) {
+        return {
+            rewarded: false,
+            message: `Completaste la partida, pero ya recibiste un premio recientemente. Podrás ganar otra recompensa en ${Math.ceil(cooldownRemaining / 60000)} min.`
+        };
+    }
+
+    const previousBalance = account.balance;
+    const previousRewardAt = account[rewardField];
+    account.balance += reward;
+    account[rewardField] = now;
+    try {
+        saveEconomyData();
+        return {
+            rewarded: true,
+            message: `Ganaste **${formatPesos(reward)}**. Nuevo saldo: **${formatPesos(account.balance)}**.`
+        };
+    } catch (error) {
+        account.balance = previousBalance;
+        account[rewardField] = previousRewardAt;
+        console.error(`No pude guardar la recompensa de ${gameName}:`, error);
+        return {
+            rewarded: false,
+            message: "La partida terminó, pero no pude guardar el premio. Contacta a un administrador."
+        };
+    }
+}
+
+function createHangmanEmbed(state, status = "Escribe una letra en el canal para adivinar.") {
+    const maskedWord = [...state.word].map(letter =>
+        state.guessedLetters.has(letter) ? letter.toLocaleUpperCase("es-MX") : "_"
+    ).join(" ");
+    const guessedText = [...state.guessedLetters].map(letter => letter.toLocaleUpperCase("es-MX")).join(", ") || "Ninguna";
     return createEconomyEmbed(
-        "🧠 Memorama de iCloud",
+        "🔤 Ahorcado",
         [
-            "Encuentra las ocho parejas. Cada dos cartas que compares cuentan como un movimiento.",
-            `**Movimientos:** ${state.moves} · **Parejas:** ${state.matched.size / 2} / ${MEMORY_EMOJIS.length}`,
-            `**Tiempo:** ${elapsedSeconds} s`,
+            `\`\`\`\n${HANGMAN_DRAWINGS[state.mistakes]}\n\`\`\``,
+            `**Pista:** ${state.hint}`,
+            `**Palabra:** ${maskedWord}`,
+            `**Letras probadas:** ${guessedText}`,
+            `**Errores:** ${state.mistakes} / ${state.maxMistakes}`,
+            "",
+            status
+        ].join("\n"),
+        0x7656d6
+    );
+}
+
+function createTriviaEmbed(state, status = "Elige una respuesta con los botones.") {
+    const question = state.questions[state.currentIndex];
+    return createEconomyEmbed(
+        "🧠 Trivia de iCloud",
+        [
+            `**Pregunta ${state.currentIndex + 1} de ${state.questions.length}**`,
+            question.question,
+            "",
+            `**Aciertos:** ${state.correctAnswers} / ${state.questions.length}`,
+            "",
+            status
+        ].join("\n"),
+        0x7656d6
+    );
+}
+
+function createTriviaButtons(gameId, state, disabled = false) {
+    const question = state.questions[state.currentIndex];
+    return [
+        new ActionRowBuilder().addComponents(
+            ...question.options.map((option, index) =>
+                new ButtonBuilder()
+                    .setCustomId(`trivia-${gameId}-${state.currentIndex}-${index}`)
+                    .setLabel(option)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled)
+            )
+        )
+    ];
+}
+
+async function startHangmanGame(interaction) {
+    if (!interaction.guild || !interaction.channel?.createMessageCollector) {
+        await interaction.reply({
+            content: "❌ El ahorcado solo está disponible en un canal de texto dentro de un servidor.",
+            ephemeral: true
+        });
+        return;
+    }
+
+    const gameKey = `${interaction.guild.id}:${interaction.user.id}`;
+    if (activeWordGames.has(gameKey)) {
+        await interaction.reply({
+            content: "Ya tienes una partida de ahorcado o trivia activa en este servidor.",
+            ephemeral: true
+        });
+        return;
+    }
+    activeWordGames.add(gameKey);
+
+    const selectedWord = pickRandomMessage(HANGMAN_WORDS);
+    const state = {
+        word: selectedWord.word,
+        hint: selectedWord.hint,
+        guessedLetters: new Set(),
+        mistakes: 0,
+        maxMistakes: HANGMAN_DRAWINGS.length - 1
+    };
+
+    try {
+        await interaction.reply({ embeds: [createHangmanEmbed(state)] });
+    } catch (error) {
+        activeWordGames.delete(gameKey);
+        throw error;
+    }
+
+    let gameMessage;
+    try {
+        gameMessage = await interaction.fetchReply();
+    } catch (error) {
+        activeWordGames.delete(gameKey);
+        console.error("No pude preparar el canal de la partida de ahorcado:", error);
+        await interaction.editReply({
+            content: "❌ No pude iniciar el tablero del ahorcado. Inténtalo de nuevo.",
+            embeds: [],
+            components: []
+        }).catch(editError => {
+            console.error("No pude notificar que falló el inicio del ahorcado:", editError);
+        });
+        return;
+    }
+    const collector = interaction.channel.createMessageCollector({
+        time: 180000,
+        filter: message => message.author.id === interaction.user.id && !message.author.bot
+    });
+    let processing = false;
+
+    collector.on("collect", async guessMessage => {
+        if (processing) return;
+        const guess = guessMessage.content.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        if (!/^[a-z]+$/.test(guess)) return;
+
+        processing = true;
+        try {
+            if (guess.length === 1) {
+                if (state.guessedLetters.has(guess)) return;
+                state.guessedLetters.add(guess);
+                if (!state.word.includes(guess)) state.mistakes++;
+            } else {
+                if (guess === state.word) {
+                    for (const letter of state.word) state.guessedLetters.add(letter);
+                } else {
+                    state.mistakes++;
+                }
+            }
+
+            const won = [...state.word].every(letter => state.guessedLetters.has(letter));
+            const lost = state.mistakes >= state.maxMistakes;
+            if (won || lost) {
+                collector.stop("finished");
+                const result = won
+                    ? awardMinigameReward(
+                        interaction.guild.id,
+                        interaction.user.id,
+                        "lastHangmanRewardAt",
+                        HANGMAN_REWARD_COOLDOWN,
+                        HANGMAN_REWARD,
+                        "ahorcado"
+                    ).message
+                    : "😵 Se acabaron los intentos. ¡Prueba otra palabra en una nueva partida!";
+                await gameMessage.edit({
+                    embeds: [createHangmanEmbed(
+                        state,
+                        `${won ? "🏆 ¡Adivinaste la palabra!" : "❌ Perdiste."} La palabra era **${state.word.toLocaleUpperCase("es-MX")}**.\n${result}`
+                    )]
+                });
+                return;
+            }
+
+            await gameMessage.edit({
+                embeds: [createHangmanEmbed(
+                    state,
+                    guess.length > 1 && guess !== state.word
+                        ? `La palabra no es **${guess.toLocaleUpperCase("es-MX")}**. Perdiste un intento.`
+                        : "Sigue adivinando con una letra o intenta la palabra completa."
+                )]
+            });
+        } catch (error) {
+            console.error("Falló una jugada del ahorcado:", error);
+            collector.stop("error");
+        } finally {
+            processing = false;
+        }
+    });
+
+    collector.on("end", (_, reason) => {
+        activeWordGames.delete(gameKey);
+        if (reason === "finished") return;
+        const status = reason === "time"
+            ? `⌛ Se acabó el tiempo. La palabra era **${state.word.toLocaleUpperCase("es-MX")}**.`
+            : "La partida terminó por un error inesperado.";
+        void gameMessage.edit({
+            embeds: [createHangmanEmbed(state, status)]
+        }).catch(error => {
+            console.error("No pude cerrar la partida de ahorcado:", error);
+        });
+    });
+}
+
+async function startTriviaGame(interaction) {
+    if (!interaction.guild) {
+        await interaction.reply({
+            content: "❌ La trivia solo está disponible dentro de un servidor.",
+            ephemeral: true
+        });
+        return;
+    }
+
+    const gameKey = `${interaction.guild.id}:${interaction.user.id}`;
+    if (activeWordGames.has(gameKey)) {
+        await interaction.reply({
+            content: "Ya tienes una partida de ahorcado o trivia activa en este servidor.",
+            ephemeral: true
+        });
+        return;
+    }
+    activeWordGames.add(gameKey);
+
+    const state = {
+        questions: shuffleItems(TRIVIA_QUESTIONS)
+            .slice(0, 5)
+            .map(question => ({
+                ...question,
+                options: shuffleItems(question.options)
+            })),
+        currentIndex: 0,
+        correctAnswers: 0,
+        finished: false
+    };
+    const gameId = interaction.id;
+
+    try {
+        await interaction.reply({
+            embeds: [createTriviaEmbed(state)],
+            components: createTriviaButtons(gameId, state)
+        });
+    } catch (error) {
+        activeWordGames.delete(gameKey);
+        throw error;
+    }
+
+    let gameMessage;
+    try {
+        gameMessage = await interaction.fetchReply();
+    } catch (error) {
+        activeWordGames.delete(gameKey);
+        console.error("No pude preparar el mensaje de la trivia:", error);
+        await interaction.editReply({
+            content: "❌ No pude iniciar la trivia. Inténtalo de nuevo.",
+            embeds: [],
+            components: []
+        }).catch(editError => {
+            console.error("No pude notificar que falló el inicio de la trivia:", editError);
+        });
+        return;
+    }
+    const collector = gameMessage.createMessageComponentCollector({
+        time: TRIVIA_QUESTION_TIME,
+        filter: buttonInteraction =>
+            buttonInteraction.customId.startsWith(`trivia-${gameId}-`)
+    });
+    let processing = false;
+
+    const finishGame = async timedOut => {
+        if (state.finished) return;
+        state.finished = true;
+        collector.stop("completed");
+        const reward = state.correctAnswers * 150 + (state.correctAnswers === state.questions.length ? 250 : 0);
+        const rewardMessage = reward > 0
+            ? awardMinigameReward(
+                interaction.guild.id,
+                interaction.user.id,
+                "lastTriviaRewardAt",
+                TRIVIA_REWARD_COOLDOWN,
+                reward,
+                "trivia"
+            ).message
+            : "No hubo aciertos esta vez, así que no se generó recompensa.";
+        const result = timedOut ? "⌛ Se agotó el tiempo para responder." : "🏁 ¡Terminó la ronda!";
+        await gameMessage.edit({
+            embeds: [createEconomyEmbed(
+                "🧠 Resultado de la trivia",
+                `${result}\n**Aciertos:** ${state.correctAnswers} / ${state.questions.length}\n${rewardMessage}`,
+                0x2f9e8f
+            )],
+            components: []
+        });
+    };
+
+    collector.on("collect", async buttonInteraction => {
+        if (buttonInteraction.user.id !== interaction.user.id) {
+            await buttonInteraction.reply({
+                content: "Esta ronda de trivia pertenece a quien la inició.",
+                ephemeral: true
+            });
+            return;
+        }
+        if (processing || state.finished) {
+            await buttonInteraction.deferUpdate();
+            return;
+        }
+
+        const [, , questionIndexText, optionIndexText] = buttonInteraction.customId.split("-");
+        const questionIndex = Number(questionIndexText);
+        const optionIndex = Number(optionIndexText);
+        if (
+            questionIndex !== state.currentIndex
+            || !Number.isInteger(optionIndex)
+            || optionIndex < 0
+            || optionIndex >= state.questions[state.currentIndex].options.length
+        ) {
+            await buttonInteraction.reply({
+                content: "Esa respuesta ya no está activa. Elige una opción de la pregunta actual.",
+                ephemeral: true
+            });
+            return;
+        }
+
+        processing = true;
+        collector.resetTimer({ time: TRIVIA_QUESTION_TIME });
+        try {
+            const question = state.questions[state.currentIndex];
+            const isCorrect = question.options[optionIndex] === question.answer;
+            if (isCorrect) state.correctAnswers++;
+            state.currentIndex++;
+
+            if (state.currentIndex >= state.questions.length) {
+                await buttonInteraction.deferUpdate();
+                await finishGame(false);
+                return;
+            }
+
+            const status = isCorrect
+                ? "✅ ¡Correcto! Vamos con la siguiente."
+                : `❌ Incorrecto. La respuesta era **${question.answer}**.`;
+            await buttonInteraction.update({
+                embeds: [createTriviaEmbed(state, status)],
+                components: createTriviaButtons(gameId, state)
+            });
+            collector.resetTimer({ time: TRIVIA_QUESTION_TIME });
+        } catch (error) {
+            console.error("Falló una respuesta de trivia:", error);
+            collector.stop("error");
+        } finally {
+            processing = false;
+        }
+    });
+
+    collector.on("end", (_, reason) => {
+        activeWordGames.delete(gameKey);
+        if (reason === "completed" || state.finished) return;
+        void finishGame(true).catch(error => {
+            console.error("No pude cerrar la partida de trivia:", error);
+        });
+    });
+}
+
+function createMemoryBoardEmbed(state, status = "Voltea dos cartas por turno y encuentra todas las parejas.") {
+    const elapsedSeconds = Math.floor((Date.now() - state.startedAt) / 1000);
+    const timerText = state.mode.entryFee
+        ? `**Tiempo restante:** ${Math.max(0, Math.ceil((state.deadline - Date.now()) / 1000))} s`
+        : `**Tiempo:** ${elapsedSeconds} s`;
+    return createEconomyEmbed(
+        `🧠 Memorama · ${state.mode.name}`,
+        [
+            `Encuentra las ${state.mode.pairs} parejas. Cada dos cartas que compares cuentan como un movimiento.`,
+            `**Movimientos:** ${state.moves} · **Parejas:** ${state.matched.size / 2} / ${state.mode.pairs}`,
+            timerText,
             "",
             status
         ].join("\n"),
@@ -4541,9 +5037,9 @@ function createMemoryBoardButtons(gameId, state, disabled = false) {
             .setDisabled(disabled || isMatched);
     });
 
-    return Array.from({ length: 4 }, (_, rowIndex) =>
+    return Array.from({ length: Math.ceil(buttons.length / 5) }, (_, rowIndex) =>
         new ActionRowBuilder().addComponents(
-            ...buttons.slice(rowIndex * 4, rowIndex * 4 + 4)
+            ...buttons.slice(rowIndex * 5, rowIndex * 5 + 5)
         )
     );
 }
@@ -4557,7 +5053,59 @@ async function startMemoryGame(interaction) {
         return;
     }
 
-    const cards = [...MEMORY_EMOJIS, ...MEMORY_EMOJIS];
+    const mode = MEMORY_MODES[interaction.options.getString("dificultad") || "facil"];
+    const gameKey = `${interaction.guild.id}:${interaction.user.id}`;
+    if (activeMemoryGames.has(gameKey)) {
+        await interaction.reply({
+            content: "Ya tienes una partida de memorama activa en este servidor. Termínala antes de iniciar otra.",
+            ephemeral: true
+        });
+        return;
+    }
+    activeMemoryGames.add(gameKey);
+
+    let account;
+    if (mode.entryFee) {
+        try {
+            account = getEconomyAccount(interaction.guild.id, interaction.user.id);
+            const cooldownRemaining = MEMORY_REWARD_COOLDOWN - (Date.now() - account.lastMemoryRewardAt);
+            if (cooldownRemaining > 0) {
+                activeMemoryGames.delete(gameKey);
+                await interaction.reply({
+                    content: `El modo difícil solo está disponible cuando puedes cobrar su premio. Inténtalo de nuevo en ${Math.ceil(cooldownRemaining / 60000)} min.`,
+                    ephemeral: true
+                });
+                return;
+            }
+            if (account.balance < mode.entryFee) {
+                activeMemoryGames.delete(gameKey);
+                await interaction.reply({
+                    content: `Necesitas al menos ${formatPesos(mode.entryFee)} para pagar el depósito del modo difícil.`,
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const previousBalance = account.balance;
+            account.balance -= mode.entryFee;
+            try {
+                saveEconomyData();
+            } catch (error) {
+                account.balance = previousBalance;
+                throw error;
+            }
+        } catch (error) {
+            activeMemoryGames.delete(gameKey);
+            console.error("No pude cobrar el depósito del memorama difícil:", error);
+            await interaction.reply({
+                content: "❌ No pude iniciar la partida ni cobrar el depósito. Inténtalo de nuevo.",
+                ephemeral: true
+            });
+            return;
+        }
+    }
+
+    const cards = [...MEMORY_EMOJIS.slice(0, mode.pairs), ...MEMORY_EMOJIS.slice(0, mode.pairs)];
     for (let index = cards.length - 1; index > 0; index--) {
         const randomIndex = Math.floor(Math.random() * (index + 1));
         [cards[index], cards[randomIndex]] = [cards[randomIndex], cards[index]];
@@ -4567,17 +5115,62 @@ async function startMemoryGame(interaction) {
         selected: [],
         matched: new Set(),
         moves: 0,
-        startedAt: Date.now()
+        startedAt: Date.now(),
+        mode,
+        deadline: Date.now() + mode.timeLimit
     };
     const gameId = interaction.id;
 
-    await interaction.reply({
-        embeds: [createMemoryBoardEmbed(state)],
-        components: createMemoryBoardButtons(gameId, state)
-    });
-    const gameMessage = await interaction.fetchReply();
+    try {
+        await interaction.reply({
+            embeds: [createMemoryBoardEmbed(state, mode.entryFee
+                ? `Depósito de **${formatPesos(mode.entryFee)}** pagado. Completa el tablero en **2:30 min** para ganar ${formatPesos(mode.reward)}.`
+                : undefined)],
+            components: createMemoryBoardButtons(gameId, state)
+        });
+    } catch (error) {
+        activeMemoryGames.delete(gameKey);
+        if (account && mode.entryFee) {
+            account.balance += mode.entryFee;
+            try {
+                saveEconomyData();
+            } catch (saveError) {
+                console.error("No pude reembolsar el depósito tras fallar el inicio del memorama:", saveError);
+            }
+        }
+        throw error;
+    }
+    let gameMessage;
+    try {
+        gameMessage = await interaction.fetchReply();
+    } catch (error) {
+        activeMemoryGames.delete(gameKey);
+        let refundSucceeded = false;
+        if (account && mode.entryFee) {
+            account.balance += mode.entryFee;
+            try {
+                saveEconomyData();
+                refundSucceeded = true;
+            } catch (saveError) {
+                console.error("No pude reembolsar el depósito tras fallar la carga del memorama:", saveError);
+            }
+        }
+        console.error("No pude preparar el tablero del memorama:", error);
+        await interaction.editReply({
+            content: refundSucceeded
+                ? "❌ No pude cargar el tablero; el depósito fue reembolsado. Inténtalo de nuevo."
+                : account && mode.entryFee
+                    ? "❌ No pude cargar el tablero ni confirmar el reembolso del depósito. Contacta a un administrador."
+                    : "❌ No pude cargar el tablero. Inténtalo de nuevo.",
+            embeds: [],
+            components: []
+        }).catch(editError => {
+            console.error("No pude notificar que falló el inicio del memorama:", editError);
+        });
+        return;
+    }
     const collector = gameMessage.createMessageComponentCollector({
-        time: 240000,
+        time: mode.timeLimit,
         filter: buttonInteraction =>
             buttonInteraction.customId.startsWith(`memory-${gameId}-`)
     });
@@ -4613,6 +5206,12 @@ async function startMemoryGame(interaction) {
 
         processing = true;
         try {
+            if (Date.now() >= state.deadline) {
+                await buttonInteraction.deferUpdate();
+                collector.stop("timeLimit");
+                return;
+            }
+
             state.selected.push(index);
             if (state.selected.length < 2) {
                 await buttonInteraction.update({
@@ -4642,11 +5241,11 @@ async function startMemoryGame(interaction) {
                 } else {
                     const previousBalance = account.balance;
                     const previousRewardAt = account.lastMemoryRewardAt;
-                    account.balance += MEMORY_REWARD;
+                    account.balance += mode.reward;
                     account.lastMemoryRewardAt = now;
                     try {
                         saveEconomyData();
-                        result = `🏆 ¡Memorama completado! Ganaste **${formatPesos(MEMORY_REWARD)}** en **${state.moves} movimientos** y ${Math.floor((now - state.startedAt) / 1000)} segundos.\nNuevo saldo: **${formatPesos(account.balance)}**`;
+                        result = `🏆 ¡Memorama completado! Ganaste **${formatPesos(mode.reward)}** en **${state.moves} movimientos** y ${Math.floor((now - state.startedAt) / 1000)} segundos.${mode.entryFee ? ` El depósito de ${formatPesos(mode.entryFee)} ya se descontó al empezar.` : ""}\nNuevo saldo: **${formatPesos(account.balance)}**`;
                     } catch (error) {
                         account.balance = previousBalance;
                         account.lastMemoryRewardAt = previousRewardAt;
@@ -4669,7 +5268,7 @@ async function startMemoryGame(interaction) {
                     embeds: [createMemoryBoardEmbed(state, "✅ ¡Pareja encontrada! Elige otras dos cartas.")],
                     components: createMemoryBoardButtons(gameId, state)
                 });
-                collector.resetTimer();
+                if (!mode.entryFee) collector.resetTimer();
                 return;
             }
 
@@ -4683,7 +5282,7 @@ async function startMemoryGame(interaction) {
                 embeds: [createMemoryBoardEmbed(state)],
                 components: createMemoryBoardButtons(gameId, state)
             });
-            collector.resetTimer();
+            if (!mode.entryFee) collector.resetTimer();
         } catch (error) {
             console.error("Falló una jugada del memorama:", error);
             const message = "❌ No pude actualizar el tablero. Intenta otra vez o inicia una nueva partida con `/memorama`.";
@@ -4699,11 +5298,15 @@ async function startMemoryGame(interaction) {
     });
 
     collector.on("end", (_, reason) => {
+        activeMemoryGames.delete(gameKey);
         if (reason === "completed") return;
+        const timeoutStatus = mode.entryFee
+            ? `⌛ Se acabó el tiempo. Encontraste **${state.matched.size / 2} de ${mode.pairs} parejas** en ${state.moves} movimientos. Perdiste el depósito de **${formatPesos(mode.entryFee)}**.`
+            : `⌛ Se acabó el tiempo. Encontraste **${state.matched.size / 2} de ${mode.pairs} parejas** en ${state.moves} movimientos.`;
         void gameMessage.edit({
             embeds: [createMemoryBoardEmbed(
                 state,
-                `⌛ Se acabó el tiempo. Encontraste **${state.matched.size / 2} de ${MEMORY_EMOJIS.length} parejas** en ${state.moves} movimientos.`
+                timeoutStatus
             )],
             components: createMemoryBoardButtons(gameId, state, true)
         }).catch(error => {
@@ -5323,6 +5926,16 @@ client.on("interactionCreate", async interaction => {
 
     if (interaction.commandName === "memorama") {
         await startMemoryGame(interaction);
+        return;
+    }
+
+    if (interaction.commandName === "ahorcado") {
+        await startHangmanGame(interaction);
+        return;
+    }
+
+    if (interaction.commandName === "trivia") {
+        await startTriviaGame(interaction);
         return;
     }
 
