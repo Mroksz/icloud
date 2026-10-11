@@ -109,12 +109,12 @@ const MYSTERY_REWARD = 300;
 const MYSTERY_REWARD_COOLDOWN = 60 * 60 * 1000;
 const MEMORY_REWARD = 250;
 const MEMORY_REWARD_COOLDOWN = 30 * 60 * 1000;
-const MEMORY_MISMATCH_DELAY = 900;
+const MEMORY_MISMATCH_DELAY = 300;
 const MEMORY_EMOJIS = ["🍎", "🍋", "🍇", "🍉", "🍒", "🥑", "🐱", "🐸", "🐶", "🦊", "🐼", "🐵"];
 const MEMORY_MODES = {
     facil: { name: "Fácil", pairs: 8, timeLimit: 240000, reward: MEMORY_REWARD },
     intermedio: { name: "Intermedio", pairs: 10, timeLimit: 240000, reward: 600 },
-    dificil: { name: "Difícil", pairs: 12, timeLimit: 150000, reward: 1800, entryFee: 300 }
+    dificil: { name: "Difícil", pairs: 11, timeLimit: 180000, reward: 1800, entryFee: 300 }
 };
 const HANGMAN_REWARD = 300;
 const HANGMAN_REWARD_COOLDOWN = 15 * 60 * 1000;
@@ -2750,7 +2750,7 @@ let commands = [
                 .addChoices(
                     { name: "Fácil · 8 parejas", value: "facil" },
                     { name: "Intermedio · 10 parejas", value: "intermedio" },
-                    { name: "Difícil · 12 parejas, 2:30 min y depósito de $300", value: "dificil" }
+                    { name: "Difícil · 11 parejas, 3 min y depósito de $300", value: "dificil" }
                 )
         ),
 
@@ -3102,9 +3102,9 @@ const HELP_PAGES = [
             "`/gato [oponente]` Juega tres en raya contra el bot o una persona.",
             "`/akinator` Piensa en alguien o algo y responde hasta que Akinator adivine.",
             "`/misterio` Investiga un caso y gana $300 al resolverlo correctamente; hay un tiempo de espera de una hora entre premios.",
-            "`/memorama dificultad` Elige fácil (8 parejas, $250), intermedio (10 parejas, $600) o difícil (12 parejas, hasta $1,800 en 2:30 min; cobra $300 de depósito y lo pierdes si se acaba el tiempo). Los premios tienen 30 minutos de espera.",
-            "`/ahorcado` Adivina una palabra con hasta 6 errores; al ganar recibes $300 (un premio cada 15 minutos).",
-            "`/trivia` Responde 5 preguntas de cultura general. Ganas $150 por acierto y $250 extra por una ronda perfecta; premio cada 15 minutos.",
+            "`/memorama dificultad` Elige fácil (8 parejas, $250), intermedio (10 parejas, $600) o difícil (11 parejas, hasta $1,800 en 3 min; cobra $300 de depósito y lo pierdes si se acaba el tiempo). Los premios tienen 30 minutos de espera. Todas las partidas incluyen reinicio y finalización.",
+            "`/ahorcado` Adivina con botones de letras o escribe la palabra; tienes hasta 6 errores. Reinicia o finaliza cuando quieras. Premio de $300 cada 15 minutos.",
+            "`/trivia` Responde 5 preguntas de cultura general. Ganas $150 por acierto y $250 extra por una ronda perfecta; reinicia o finaliza con los botones. Premio cada 15 minutos.",
             "`/oraculo pregunta` Pregúntale al oráculo caótico de iCloud.",
             "`/reto` Recibe un reto creativo y pide otro con el botón.",
             "`/superpoder` Descubre un poder absurdo con un efecto secundario peor.",
@@ -4667,7 +4667,7 @@ function awardMinigameReward(guildId, userId, rewardField, cooldown, reward, gam
     }
 }
 
-function createHangmanEmbed(state, status = "Escribe una letra en el canal para adivinar.") {
+function createHangmanEmbed(state, status = "Elige una letra con los botones o escribe la palabra en el canal.") {
     const maskedWord = [...state.word].map(letter =>
         state.guessedLetters.has(letter) ? letter.toLocaleUpperCase("es-MX") : "_"
     ).join(" ");
@@ -4679,12 +4679,55 @@ function createHangmanEmbed(state, status = "Escribe una letra en el canal para 
             `**Pista:** ${state.hint}`,
             `**Palabra:** ${maskedWord}`,
             `**Letras probadas:** ${guessedText}`,
+            `**Teclado:** página ${state.keyboardPage + 1} de ${Math.ceil(HANGMAN_ALPHABET.length / 20)}`,
             `**Errores:** ${state.mistakes} / ${state.maxMistakes}`,
             "",
             status
         ].join("\n"),
         0x7656d6
-    );
+    ).setFooter({ text: `Jugando: ${state.playerName} · Economía del servidor · Pesos mexicanos` });
+}
+
+const HANGMAN_ALPHABET = [..."abcdefghijklmnñopqrstuvwxyz"];
+
+function createHangmanComponents(gameId, state, disabled = false) {
+    const pageLetters = HANGMAN_ALPHABET.slice(state.keyboardPage * 20, state.keyboardPage * 20 + 20);
+    const rows = [];
+    for (let index = 0; index < pageLetters.length; index += 5) {
+        rows.push(new ActionRowBuilder().addComponents(
+            ...pageLetters.slice(index, index + 5).map(letter =>
+                new ButtonBuilder()
+                    .setCustomId(`hang-${gameId}-l-${letter}`)
+                    .setLabel(letter.toLocaleUpperCase("es-MX"))
+                    .setStyle(state.guessedLetters.has(letter)
+                        ? state.word.includes(letter) ? ButtonStyle.Success : ButtonStyle.Danger
+                        : ButtonStyle.Secondary)
+                    .setDisabled(disabled || state.finished || state.guessedLetters.has(letter))
+            )
+        ));
+    }
+
+    rows.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`hang-${gameId}-p`)
+            .setLabel("← Letras")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(disabled || state.finished || state.keyboardPage === 0),
+        new ButtonBuilder()
+            .setCustomId(`hang-${gameId}-r`)
+            .setLabel("🔄 Reiniciar")
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId(`hang-${gameId}-e`)
+            .setLabel("⏹ Finalizar")
+            .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId(`hang-${gameId}-n`)
+            .setLabel("Letras →")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(disabled || state.finished || state.keyboardPage >= Math.ceil(HANGMAN_ALPHABET.length / 20) - 1)
+    ));
+    return rows;
 }
 
 function createTriviaEmbed(state, status = "Elige una respuesta con los botones.") {
@@ -4700,10 +4743,10 @@ function createTriviaEmbed(state, status = "Elige una respuesta con los botones.
             status
         ].join("\n"),
         0x7656d6
-    );
+    ).setFooter({ text: `Jugando: ${state.playerName} · Economía del servidor · Pesos mexicanos` });
 }
 
-function createTriviaButtons(gameId, state, disabled = false) {
+function createTriviaButtons(gameId, state, disabled = false, controlsDisabled = false) {
     const question = state.questions[state.currentIndex];
     return [
         new ActionRowBuilder().addComponents(
@@ -4714,6 +4757,18 @@ function createTriviaButtons(gameId, state, disabled = false) {
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled)
             )
+        ),
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`trivia-${gameId}-restart`)
+                .setLabel("🔄 Reiniciar")
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(controlsDisabled),
+            new ButtonBuilder()
+                .setCustomId(`trivia-${gameId}-end`)
+                .setLabel("⏹ Finalizar")
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(controlsDisabled)
         )
     ];
 }
@@ -4721,7 +4776,7 @@ function createTriviaButtons(gameId, state, disabled = false) {
 async function startHangmanGame(interaction) {
     if (!interaction.guild || !interaction.channel?.createMessageCollector) {
         await interaction.reply({
-            content: "❌ El ahorcado solo está disponible en un canal de texto dentro de un servidor.",
+            content: "❌ El ahorcado solo está disponible dentro de un servidor.",
             ephemeral: true
         });
         return;
@@ -4743,11 +4798,18 @@ async function startHangmanGame(interaction) {
         hint: selectedWord.hint,
         guessedLetters: new Set(),
         mistakes: 0,
-        maxMistakes: HANGMAN_DRAWINGS.length - 1
+        maxMistakes: HANGMAN_DRAWINGS.length - 1,
+        keyboardPage: 0,
+        finished: false,
+        playerName: interaction.member?.displayName || interaction.user.globalName || interaction.user.username
     };
 
     try {
-        await interaction.reply({ embeds: [createHangmanEmbed(state)] });
+        await interaction.reply({
+            embeds: [createHangmanEmbed(state, "Elige una letra con los botones.")],
+            components: createHangmanComponents(interaction.id, state),
+            allowedMentions: { parse: [] }
+        });
     } catch (error) {
         activeWordGames.delete(gameKey);
         throw error;
@@ -4768,65 +4830,174 @@ async function startHangmanGame(interaction) {
         });
         return;
     }
-    const collector = interaction.channel.createMessageCollector({
+    const collector = gameMessage.createMessageComponentCollector({
+        time: 180000,
+        filter: buttonInteraction => buttonInteraction.customId.startsWith(`hang-${interaction.id}-`)
+    });
+    const guessCollector = interaction.channel.createMessageCollector({
         time: 180000,
         filter: message => message.author.id === interaction.user.id && !message.author.bot
     });
     let processing = false;
 
-    collector.on("collect", async guessMessage => {
-        if (processing) return;
-        const guess = guessMessage.content.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        if (!/^[a-z]+$/.test(guess)) return;
+    guessCollector.on("collect", async guessMessage => {
+        if (processing || state.finished) return;
+        const guess = guessMessage.content.trim()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase();
+        if (!/^[a-zñ]{2,}$/.test(guess)) return;
 
         processing = true;
         try {
-            if (guess.length === 1) {
-                if (state.guessedLetters.has(guess)) return;
-                state.guessedLetters.add(guess);
-                if (!state.word.includes(guess)) state.mistakes++;
+            const won = guess === state.word;
+            if (won) {
+                for (const letter of state.word) state.guessedLetters.add(letter);
             } else {
-                if (guess === state.word) {
-                    for (const letter of state.word) state.guessedLetters.add(letter);
-                } else {
-                    state.mistakes++;
-                }
+                state.mistakes++;
             }
+
+            const lost = state.mistakes >= state.maxMistakes;
+            let status = won
+                ? `🏆 ¡Adivinaste la palabra! ${awardMinigameReward(
+                    interaction.guild.id,
+                    interaction.user.id,
+                    "lastHangmanRewardAt",
+                    HANGMAN_REWARD_COOLDOWN,
+                    HANGMAN_REWARD,
+                    "ahorcado"
+                ).message}`
+                : `La palabra no es **${guess.toLocaleUpperCase("es-MX")}**.`;
+            if (won || lost) {
+                state.finished = true;
+                status = won ? status : "😵 Se acabaron los intentos.";
+                status += ` Palabra: **${state.word.toLocaleUpperCase("es-MX")}**.`;
+                state.terminalStatus = status;
+                collector.resetTimer({ time: 60000 });
+            }
+
+            await gameMessage.edit({
+                embeds: [createHangmanEmbed(state, status)],
+                components: createHangmanComponents(interaction.id, state)
+            });
+            if (!state.finished) collector.resetTimer({ time: 180000 });
+            if (!state.finished) guessCollector.resetTimer({ time: 180000 });
+        } catch (error) {
+            console.error("Falló una respuesta escrita del ahorcado:", error);
+        } finally {
+            processing = false;
+        }
+    });
+
+    collector.on("collect", async buttonInteraction => {
+        if (buttonInteraction.user.id !== interaction.user.id) {
+            await buttonInteraction.reply({
+                content: "Esta partida de ahorcado pertenece a quien la inició.",
+                ephemeral: true
+            });
+            return;
+        }
+        if (processing) {
+            await buttonInteraction.deferUpdate();
+            return;
+        }
+        processing = true;
+        try {
+            const action = buttonInteraction.customId.slice(`hang-${interaction.id}-`.length);
+            if (action === "r") {
+                const nextWord = pickRandomMessage(HANGMAN_WORDS);
+                state.word = nextWord.word;
+                state.hint = nextWord.hint;
+                state.guessedLetters.clear();
+                state.mistakes = 0;
+                state.keyboardPage = 0;
+                state.finished = false;
+                state.terminalStatus = "";
+                collector.resetTimer({ time: 180000 });
+                guessCollector.resetTimer({ time: 180000 });
+                await buttonInteraction.update({
+                    embeds: [createHangmanEmbed(state, "Partida nueva. Elige una letra.")],
+                    components: createHangmanComponents(interaction.id, state)
+                });
+                return;
+            }
+
+            if (action === "e") {
+                state.finished = true;
+                state.terminalStatus = `Partida finalizada. La palabra era **${state.word.toLocaleUpperCase("es-MX")}**.`;
+                collector.stop("userEnd");
+                await buttonInteraction.update({
+                    embeds: [createHangmanEmbed(state, state.terminalStatus)],
+                    components: createHangmanComponents(interaction.id, state, true)
+                });
+                return;
+            }
+
+            if (action === "p" || action === "n") {
+                state.keyboardPage += action === "n" ? 1 : -1;
+                await buttonInteraction.update({
+                    embeds: [createHangmanEmbed(state)],
+                    components: createHangmanComponents(interaction.id, state)
+                });
+                return;
+            }
+
+            if (state.finished) {
+                await buttonInteraction.reply({
+                    content: "La partida terminó. Usa Reiniciar para jugar otra vez.",
+                    ephemeral: true
+                });
+                return;
+            }
+
+            let guess = action.slice("l-".length);
+            if (!action.startsWith("l-")) {
+                await buttonInteraction.reply({
+                    content: "No reconocí esa acción. Usa los botones del ahorcado.",
+                    ephemeral: true
+                });
+                return;
+            }
+            guess = guess.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            if (state.guessedLetters.has(guess)) {
+                await buttonInteraction.deferUpdate();
+                return;
+            }
+            state.guessedLetters.add(guess);
+            if (!state.word.includes(guess)) state.mistakes++;
 
             const won = [...state.word].every(letter => state.guessedLetters.has(letter));
             const lost = state.mistakes >= state.maxMistakes;
+            let status = "Sigue eligiendo letras con los botones.";
             if (won || lost) {
-                collector.stop("finished");
-                const result = won
-                    ? awardMinigameReward(
+                state.finished = true;
+                status = won
+                    ? `🏆 ¡Adivinaste la palabra! ${awardMinigameReward(
                         interaction.guild.id,
                         interaction.user.id,
                         "lastHangmanRewardAt",
                         HANGMAN_REWARD_COOLDOWN,
                         HANGMAN_REWARD,
                         "ahorcado"
-                    ).message
-                    : "😵 Se acabaron los intentos. ¡Prueba otra palabra en una nueva partida!";
-                await gameMessage.edit({
-                    embeds: [createHangmanEmbed(
-                        state,
-                        `${won ? "🏆 ¡Adivinaste la palabra!" : "❌ Perdiste."} La palabra era **${state.word.toLocaleUpperCase("es-MX")}**.\n${result}`
-                    )]
-                });
-                return;
+                    ).message}`
+                    : "😵 Se acabaron los intentos.";
+                status += ` Palabra: **${state.word.toLocaleUpperCase("es-MX")}**.`;
+                state.terminalStatus = status;
+                collector.resetTimer({ time: 60000 });
             }
 
-            await gameMessage.edit({
-                embeds: [createHangmanEmbed(
-                    state,
-                    guess.length > 1 && guess !== state.word
-                        ? `La palabra no es **${guess.toLocaleUpperCase("es-MX")}**. Perdiste un intento.`
-                        : "Sigue adivinando con una letra o intenta la palabra completa."
-                )]
+            await buttonInteraction.update({
+                embeds: [createHangmanEmbed(state, status)],
+                components: createHangmanComponents(interaction.id, state)
             });
+            if (!state.finished) collector.resetTimer({ time: 180000 });
+            if (!state.finished) guessCollector.resetTimer({ time: 180000 });
         } catch (error) {
             console.error("Falló una jugada del ahorcado:", error);
-            collector.stop("error");
+            await buttonInteraction.followUp({
+                content: "❌ No pude actualizar el ahorcado. Inténtalo de nuevo.",
+                ephemeral: true
+            }).catch(replyError => console.error("No pude notificar el error del ahorcado:", replyError));
         } finally {
             processing = false;
         }
@@ -4834,12 +5005,16 @@ async function startHangmanGame(interaction) {
 
     collector.on("end", (_, reason) => {
         activeWordGames.delete(gameKey);
-        if (reason === "finished") return;
-        const status = reason === "time"
-            ? `⌛ Se acabó el tiempo. La palabra era **${state.word.toLocaleUpperCase("es-MX")}**.`
-            : "La partida terminó por un error inesperado.";
+        guessCollector.stop("gameEnded");
+        if (reason === "userEnd") return;
+        const status = state.finished
+            ? state.terminalStatus || "La partida terminó. Usa /ahorcado para iniciar otra."
+            : reason === "time"
+                ? `⌛ Se acabó el tiempo. La palabra era **${state.word.toLocaleUpperCase("es-MX")}**.`
+                : "La partida terminó por un error inesperado.";
         void gameMessage.edit({
-            embeds: [createHangmanEmbed(state, status)]
+            embeds: [createHangmanEmbed(state, status)],
+            components: createHangmanComponents(interaction.id, { ...state, finished: true }, true)
         }).catch(error => {
             console.error("No pude cerrar la partida de ahorcado:", error);
         });
@@ -4874,7 +5049,8 @@ async function startTriviaGame(interaction) {
             })),
         currentIndex: 0,
         correctAnswers: 0,
-        finished: false
+        finished: false,
+        playerName: interaction.member?.displayName || interaction.user.globalName || interaction.user.username
     };
     const gameId = interaction.id;
 
@@ -4910,10 +5086,9 @@ async function startTriviaGame(interaction) {
     });
     let processing = false;
 
-    const finishGame = async timedOut => {
+    const finishGame = async (timedOut, finalizedByUser = false) => {
         if (state.finished) return;
         state.finished = true;
-        collector.stop("completed");
         const reward = state.correctAnswers * 150 + (state.correctAnswers === state.questions.length ? 250 : 0);
         const rewardMessage = reward > 0
             ? awardMinigameReward(
@@ -4925,15 +5100,20 @@ async function startTriviaGame(interaction) {
                 "trivia"
             ).message
             : "No hubo aciertos esta vez, así que no se generó recompensa.";
-        const result = timedOut ? "⌛ Se agotó el tiempo para responder." : "🏁 ¡Terminó la ronda!";
+        const result = timedOut
+            ? "⌛ Se agotó el tiempo para responder."
+            : finalizedByUser
+                ? "⏹ Finalizaste la ronda."
+                : "🏁 ¡Terminó la ronda!";
         await gameMessage.edit({
             embeds: [createEconomyEmbed(
                 "🧠 Resultado de la trivia",
                 `${result}\n**Aciertos:** ${state.correctAnswers} / ${state.questions.length}\n${rewardMessage}`,
                 0x2f9e8f
-            )],
-            components: []
+            ).setFooter({ text: `Jugando: ${state.playerName} · Economía del servidor · Pesos mexicanos` })],
+            components: createTriviaButtons(gameId, state, true, timedOut)
         });
+        if (!timedOut) collector.resetTimer({ time: 60000 });
     };
 
     collector.on("collect", async buttonInteraction => {
@@ -4944,12 +5124,55 @@ async function startTriviaGame(interaction) {
             });
             return;
         }
-        if (processing || state.finished) {
+        if (processing) {
             await buttonInteraction.deferUpdate();
             return;
         }
 
-        const [, , questionIndexText, optionIndexText] = buttonInteraction.customId.split("-");
+        const action = buttonInteraction.customId.slice(`trivia-${gameId}-`.length);
+        if (action === "restart") {
+            processing = true;
+            try {
+                state.questions = shuffleItems(TRIVIA_QUESTIONS)
+                    .slice(0, 5)
+                    .map(question => ({ ...question, options: shuffleItems(question.options) }));
+                state.currentIndex = 0;
+                state.correctAnswers = 0;
+                state.finished = false;
+                collector.resetTimer({ time: TRIVIA_QUESTION_TIME });
+                await buttonInteraction.update({
+                    embeds: [createTriviaEmbed(state, "Partida nueva. ¡Éxito!")],
+                    components: createTriviaButtons(gameId, state)
+                });
+            } catch (error) {
+                console.error("No pude reiniciar la trivia:", error);
+                await buttonInteraction.followUp({
+                    content: "❌ No pude reiniciar la trivia. Inténtalo de nuevo.",
+                    ephemeral: true
+                }).catch(replyError => console.error("No pude notificar el error al reiniciar trivia:", replyError));
+            } finally {
+                processing = false;
+            }
+            return;
+        }
+        if (action === "end") {
+            if (state.finished) {
+                await buttonInteraction.update({
+                    components: createTriviaButtons(gameId, state, true, true)
+                });
+                collector.stop("userEnd");
+                return;
+            }
+            await buttonInteraction.deferUpdate();
+            await finishGame(false, true);
+            return;
+        }
+        if (state.finished) {
+            await buttonInteraction.deferUpdate();
+            return;
+        }
+
+        const [questionIndexText, optionIndexText] = action.split("-");
         const questionIndex = Number(questionIndexText);
         const optionIndex = Number(optionIndexText);
         if (
@@ -4966,7 +5189,6 @@ async function startTriviaGame(interaction) {
         }
 
         processing = true;
-        collector.resetTimer({ time: TRIVIA_QUESTION_TIME });
         try {
             const question = state.questions[state.currentIndex];
             const isCorrect = question.options[optionIndex] === question.answer;
@@ -4974,6 +5196,7 @@ async function startTriviaGame(interaction) {
             state.currentIndex++;
 
             if (state.currentIndex >= state.questions.length) {
+                state.currentIndex = state.questions.length - 1;
                 await buttonInteraction.deferUpdate();
                 await finishGame(false);
                 return;
@@ -4997,10 +5220,17 @@ async function startTriviaGame(interaction) {
 
     collector.on("end", (_, reason) => {
         activeWordGames.delete(gameKey);
-        if (reason === "completed" || state.finished) return;
-        void finishGame(true).catch(error => {
-            console.error("No pude cerrar la partida de trivia:", error);
-        });
+        if (!state.finished) {
+            void finishGame(true).catch(error => {
+                console.error("No pude cerrar la partida de trivia:", error);
+            });
+            return;
+        }
+        if (reason === "time") {
+            void gameMessage.edit({
+                components: createTriviaButtons(gameId, state, true, true)
+            }).catch(error => console.error("No pude desactivar los botones de la trivia:", error));
+        }
     });
 }
 
@@ -5019,7 +5249,7 @@ function createMemoryBoardEmbed(state, status = "Voltea dos cartas por turno y e
             status
         ].join("\n"),
         state.matched.size === state.cards.length ? 0x2f9e8f : 0x7656d6
-    );
+    ).setFooter({ text: `Jugando: ${state.playerName} · Economía del servidor · Pesos mexicanos` });
 }
 
 function createMemoryBoardButtons(gameId, state, disabled = false) {
@@ -5034,14 +5264,29 @@ function createMemoryBoardButtons(gameId, state, disabled = false) {
                 : isRevealed
                     ? ButtonStyle.Primary
                     : ButtonStyle.Secondary)
-            .setDisabled(disabled || isMatched);
+            .setDisabled(disabled || state.finished || isMatched);
     });
 
-    return Array.from({ length: Math.ceil(buttons.length / 5) }, (_, rowIndex) =>
-        new ActionRowBuilder().addComponents(
-            ...buttons.slice(rowIndex * 5, rowIndex * 5 + 5)
-        )
-    );
+    const rows = [];
+    const rowsNeeded = Math.ceil((buttons.length + 2) / 5);
+    const cardsBeforeLastRow = Math.min(buttons.length, (rowsNeeded - 1) * 5);
+    for (let index = 0; index < cardsBeforeLastRow; index += 5) {
+        rows.push(new ActionRowBuilder().addComponents(...buttons.slice(index, index + 5)));
+    }
+    rows.push(new ActionRowBuilder().addComponents(
+        ...buttons.slice(cardsBeforeLastRow),
+        new ButtonBuilder()
+            .setCustomId(`memory-${gameId}-restart`)
+            .setLabel("🔄 Reiniciar")
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(disabled),
+        new ButtonBuilder()
+            .setCustomId(`memory-${gameId}-end`)
+            .setLabel("⏹ Finalizar")
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(disabled)
+    ));
+    return rows;
 }
 
 async function startMemoryGame(interaction) {
@@ -5117,14 +5362,16 @@ async function startMemoryGame(interaction) {
         moves: 0,
         startedAt: Date.now(),
         mode,
-        deadline: Date.now() + mode.timeLimit
+        deadline: Date.now() + mode.timeLimit,
+        finished: false,
+        playerName: interaction.member?.displayName || interaction.user.globalName || interaction.user.username
     };
     const gameId = interaction.id;
 
     try {
         await interaction.reply({
             embeds: [createMemoryBoardEmbed(state, mode.entryFee
-                ? `Depósito de **${formatPesos(mode.entryFee)}** pagado. Completa el tablero en **2:30 min** para ganar ${formatPesos(mode.reward)}.`
+                ? `Depósito de **${formatPesos(mode.entryFee)}** pagado. Completa el tablero en **3 min** para ganar ${formatPesos(mode.reward)}.`
                 : undefined)],
             components: createMemoryBoardButtons(gameId, state)
         });
@@ -5169,6 +5416,8 @@ async function startMemoryGame(interaction) {
         });
         return;
     }
+    state.startedAt = Date.now();
+    state.deadline = state.startedAt + mode.timeLimit;
     const collector = gameMessage.createMessageComponentCollector({
         time: mode.timeLimit,
         filter: buttonInteraction =>
@@ -5189,6 +5438,69 @@ async function startMemoryGame(interaction) {
             return;
         }
 
+        const action = buttonInteraction.customId.slice(`memory-${gameId}-`.length);
+        if (action === "restart" || action === "end") {
+            processing = true;
+            try {
+                if (action === "end") {
+                    state.finished = true;
+                    state.selected = [];
+                    state.terminalStatus = mode.entryFee
+                        ? `⏹ Finalizaste la partida. El depósito de ${formatPesos(mode.entryFee)} no se reembolsa.`
+                        : "⏹ Finalizaste la partida.";
+                    await buttonInteraction.update({
+                        embeds: [createMemoryBoardEmbed(state, state.terminalStatus)],
+                        components: createMemoryBoardButtons(gameId, state, true)
+                    });
+                    collector.stop("userEnd");
+                    return;
+                }
+                if (mode.entryFee && Date.now() >= state.deadline) {
+                    await buttonInteraction.reply({
+                        content: "⏱ Se agotó el tiempo de esta partida; no se puede reiniciar el modo difícil.",
+                        ephemeral: true
+                    });
+                    collector.stop("timeLimit");
+                    return;
+                }
+
+                state.cards = shuffleItems([
+                    ...MEMORY_EMOJIS.slice(0, mode.pairs),
+                    ...MEMORY_EMOJIS.slice(0, mode.pairs)
+                ]);
+                state.selected = [];
+                state.matched.clear();
+                state.moves = 0;
+                state.finished = false;
+                state.terminalStatus = "";
+                if (mode.entryFee) {
+                    collector.resetTimer({ time: Math.max(1, state.deadline - Date.now()) });
+                } else {
+                    state.startedAt = Date.now();
+                    state.deadline = state.startedAt + mode.timeLimit;
+                    collector.resetTimer({ time: mode.timeLimit });
+                }
+                await buttonInteraction.update({
+                    embeds: [createMemoryBoardEmbed(
+                        state,
+                        mode.entryFee
+                            ? `Tablero reiniciado. Tu depósito de ${formatPesos(mode.entryFee)} ya está pagado; el reloj no se reinició.`
+                            : "Tablero reiniciado. ¡A encontrar las parejas!"
+                    )],
+                    components: createMemoryBoardButtons(gameId, state)
+                });
+            } catch (error) {
+                console.error("No pude reiniciar o finalizar el memorama:", error);
+                await buttonInteraction.followUp({
+                    content: "❌ No pude completar esa acción. Inténtalo de nuevo.",
+                    ephemeral: true
+                }).catch(replyError => console.error("No pude notificar el fallo del control del memorama:", replyError));
+            } finally {
+                processing = false;
+            }
+            return;
+        }
+
         const index = Number(buttonInteraction.customId.slice(`memory-${gameId}-`.length));
         if (
             !Number.isInteger(index)
@@ -5206,7 +5518,7 @@ async function startMemoryGame(interaction) {
 
         processing = true;
         try {
-            if (Date.now() >= state.deadline) {
+            if (mode.entryFee && Date.now() >= state.deadline) {
                 await buttonInteraction.deferUpdate();
                 collector.stop("timeLimit");
                 return;
@@ -5231,6 +5543,7 @@ async function startMemoryGame(interaction) {
 
             const allMatched = state.matched.size === state.cards.length;
             if (allMatched) {
+                state.finished = true;
                 const account = getEconomyAccount(interaction.guild.id, interaction.user.id);
                 const now = Date.now();
                 const cooldownRemaining = MEMORY_REWARD_COOLDOWN
@@ -5254,11 +5567,12 @@ async function startMemoryGame(interaction) {
                     }
                 }
 
-                collector.stop("completed");
+                state.terminalStatus = result;
                 await buttonInteraction.update({
                     embeds: [createMemoryBoardEmbed(state, result)],
-                    components: createMemoryBoardButtons(gameId, state, true)
+                    components: createMemoryBoardButtons(gameId, state)
                 });
+                collector.resetTimer({ time: 60000 });
                 return;
             }
 
@@ -5277,6 +5591,11 @@ async function startMemoryGame(interaction) {
                 components: createMemoryBoardButtons(gameId, state)
             });
             await new Promise(resolve => setTimeout(resolve, MEMORY_MISMATCH_DELAY));
+            if (collector.ended || (mode.entryFee && Date.now() >= state.deadline)) {
+                state.selected = [];
+                if (!collector.ended) collector.stop("timeLimit");
+                return;
+            }
             state.selected = [];
             await gameMessage.edit({
                 embeds: [createMemoryBoardEmbed(state)],
@@ -5299,15 +5618,17 @@ async function startMemoryGame(interaction) {
 
     collector.on("end", (_, reason) => {
         activeMemoryGames.delete(gameKey);
-        if (reason === "completed") return;
-        const timeoutStatus = mode.entryFee
-            ? `⌛ Se acabó el tiempo. Encontraste **${state.matched.size / 2} de ${mode.pairs} parejas** en ${state.moves} movimientos. Perdiste el depósito de **${formatPesos(mode.entryFee)}**.`
-            : `⌛ Se acabó el tiempo. Encontraste **${state.matched.size / 2} de ${mode.pairs} parejas** en ${state.moves} movimientos.`;
+        if (reason === "userEnd") return;
+        const timedOut = !state.finished;
+        state.finished = true;
+        state.selected = [];
+        const status = timedOut
+            ? mode.entryFee
+                ? `⌛ Se acabó el tiempo. Encontraste **${state.matched.size / 2} de ${mode.pairs} parejas** en ${state.moves} movimientos. Perdiste el depósito de **${formatPesos(mode.entryFee)}**.`
+                : `⌛ Se acabó el tiempo. Encontraste **${state.matched.size / 2} de ${mode.pairs} parejas** en ${state.moves} movimientos.`
+            : state.terminalStatus || "La partida terminó.";
         void gameMessage.edit({
-            embeds: [createMemoryBoardEmbed(
-                state,
-                timeoutStatus
-            )],
+            embeds: [createMemoryBoardEmbed(state, status)],
             components: createMemoryBoardButtons(gameId, state, true)
         }).catch(error => {
             console.error("No pude cerrar el tablero del memorama:", error);
