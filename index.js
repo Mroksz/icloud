@@ -40,53 +40,7 @@ const BOT_PRESENTATION_CHANNEL_ID = "1558385288877842453";
 const SUGGESTIONS_CHANNEL_ID = "1558400450301005924";
 const BOT_INVITE_URL = "https://discord.com/oauth2/authorize?client_id=1554656981502005268&permissions=8&integration_type=0&scope=bot";
 const BOT_PRESENTATION_IMAGE_URL = "https://cdn.discordapp.com/attachments/1531765941665398835/1558394743619059792/dd78b88c8f36d58fccde936067e339ee_1.PNG?ex=6acb47b4&is=6ac9f634&hm=c49d272e7b9d6d6d453be996bfcc07ccb8a5338d2598c7aef2a218b7011b02ff";
-const FUNNY_ROLE_ID = "1531550671285784770";
 const TWITCH_STREAM_URL = "https://www.twitch.tv/soyja_20";
-const MIN_FUNNY_MESSAGE_DELAY = 3 * 60 * 60 * 1000;
-const MAX_FUNNY_MESSAGE_DELAY = 5 * 60 * 60 * 1000;
-const FUNNY_MESSAGES = [
-    "Mi cerebro abrió 37 pestañas y ahora ninguna sabe de dónde viene la música.",
-    "Hoy iba a ser productivo, pero mi cama presentó una contraoferta irresistible.",
-    "No estoy procrastinando; estoy dejando que las ideas maduren en otra habitación.",
-    "Mi última neurona pidió vacaciones y no dejó suplente.",
-    "Fui a buscar motivación y volví con hambre.",
-    "Tengo un plan perfecto. Solo falta recordar cuál era.",
-    "Mi nivel de energía está en modo ahorro, como el celular al 2%.",
-    "Si pensar contara como ejercicio, ya habría terminado la rutina de hoy.",
-    "Mi calendario dice que hoy toca brillar; le voy a pedir que lo reprograme.",
-    "Abrí la nevera por tercera vez, por si la cena había aparecido por actualización.",
-    "Estoy en decadencia, pero al menos la caída tiene buena iluminación.",
-    "Mi productividad y yo estamos en una relación a distancia.",
-    "Hoy hice una lista de pendientes y ya me cansé de verla.",
-    "El entusiasmo llegó, vio mis pendientes y se fue sin despedirse.",
-    "Tengo sueño acumulado para abrir una sucursal.",
-    "Mi fuerza de voluntad está cargando; tiempo estimado: desconocido.",
-    "Quise ordenar mi vida y terminé ordenando los iconos del escritorio.",
-    "Mi yo del futuro acaba de rechazar otra tarea que le dejé.",
-    "El lunes me prometió cambios y ya estamos negociando otra vez.",
-    "Mi cerebro puso una canción en repetición y olvidó el resto del día.",
-    "Estoy a una notificación de cerrar todo y convertirme en leyenda local.",
-    "Hoy avancé muchísimo: ahora sé exactamente qué cosas no hice.",
-    "La motivación está en línea, pero no responde mis mensajes.",
-    "Mi rutina saludable empieza mañana desde hace varias semanas.",
-    "Me levanté con energía y la gasté buscando dónde había dejado el celular.",
-    "Mi escritorio tiene capas históricas de decisiones para después.",
-    "Quise tomar las riendas del día, pero el día iba en otra dirección.",
-    "Tengo tantas pestañas abiertas que mi navegador ya necesita terapia.",
-    "Mi plan de hoy era simple; luego aparecí yo para complicarlo.",
-    "La alarma sonó y ambos decidimos que todavía no era nuestro momento.",
-    "Estoy ahorrando energía para una ocasión especial que nunca especificaron.",
-    "Mi lista de tareas ya tiene más temporadas que una serie larga.",
-    "Me iba a concentrar, pero un pensamiento secundario pidió el micrófono.",
-    "Hoy mi gran logro fue recordar por qué entré a esta habitación.",
-    "El café no arregla mis problemas, pero hace que los lea más rápido.",
-    "Mi paciencia salió un momento y dejó el estado en no molestar.",
-    "Estoy tan organizado que perdí la lista donde anoté cómo organizarme.",
-    "Quise descansar cinco minutos y desperté en el siguiente capítulo.",
-    "El modo adulto está instalado, pero todavía no encuentro dónde se abre.",
-    "Mi cerebro aceptó los términos y condiciones sin leer la parte de madrugar.",
-    "Hoy voy lento, pero con una confianza que no está respaldada por los hechos."
-];
 
 const ECONOMY_FILE = path.join(__dirname, "economy.json");
 const ROLE_ASSIGNMENTS_FILE = path.join(__dirname, "role_assignments.json");
@@ -2381,48 +2335,10 @@ const client = new Client({
 });
 
 const PERSONALITY_GUILD_ID = "1530770439704674344";
-const BOT_REPLY_GIF_URLS = [
-    "https://tenor.com/view/andrew-r-personality-likes-about-self-cv-gif-15418064",
-    "https://klipy.com/gifs/clown-9",
-    "https://tenor.com/view/angry-chinese-man-with-gun-shoot-pew-pow-gun-chinese-man-anger-gif-18651737",
-    "https://klipy.com/gifs/santi-santiagogimenez",
-    "https://tenor.com/view/tralalero-tralala-tung-tung-tung-sahur-brainrot-gif-14723192941540813594",
-    "https://tenor.com/view/old-man-spray-paint-bug-eye-man-gif-21526624",
-    "https://klipy.com/gifs/brick-wall-talking-to-wall",
-    "https://cdn.discordapp.com/attachments/1436825169699012608/1490011781693964348/ezgif-395a166e2e34663d.gif?ex=6ac9b25b&is=6ac860db&hm=75611bfc33c53406629b36f1ab1ec71d54ea3d9508fae3820b387224561131b3&",
-    "https://tenor.com/view/brotherjona-floomf-ryan-garcia-talking-to-monkey-gif-3486165354949704924",
-    "https://cdn.discordapp.com/attachments/852263444802699325/1450029816203055177/q_harias.gif?ex=6ac94340&is=6ac7f1c0&hm=45f8425ab8709e2242d6da73ee48f499d24c224db21765db3ade4d020280c5f1&",
-    "https://tenor.com/view/patrick-star-chewing-spongebob-eating-unimpressed-gif-11619313",
-    "https://tenor.com/view/job-job-application-jobless-gif-2757097081210871087",
-    "https://klipy.com/gifs/ryan-garcia-gervonta-davis"
-];
-const BOT_REPLY_DELAY = 3 * 1000;
-const BOT_REPLY_MESSAGES = [
-    "Soy adorable, pero igual malo >:D",
-    "Me mencionaste; ya puedes proceder con tu solicitud y tus disculpas.",
-    "No soy malo, solo estoy en mi arco de villano.",
-    "Estoy hecho de código, café imaginario y malas decisiones.",
-    "Te leo. Mi abogado robot recomienda que seas amable.",
-    "Atendiendo... primero debo fingir que no vi eso.",
-    "Claro que sí. Aunque mi última neurona está en una reunión.",
-    "Soy un bot de alto rendimiento... en teoría."
-];
-const BOT_MENTION_MESSAGES = [
-    "Soy adorable, ¿a que sí?",
-    "Soy interesante... aunque me menciones solo para comprobarlo."
-];
 const WELCOME_EMOJIS = [
     "<:emoji_5:1531191935354536018>",
     "<:emoji_17:1531194038676357140>",
     "<:sunglas:1531564951049732107>"
-];
-const BOT_GIF_REPLY_EMOJIS = [
-    "<:emoji_30:1531561367834853416>",
-    "<:emoji_16:1531194004333396049>",
-    "<:emoji_28:1531561292672925707>",
-    "<:emoji_32:1531561562555285504>",
-    "<:dog_laughing_at_you:1531566496038518794>",
-    "<:agent:1531565321079488685>"
 ];
 const WELCOME_MESSAGES = [
     (memberId, emoji) => `${emoji} ¡Bienvenido, <@${memberId}>! El caos ya tiene refuerzos.`,
@@ -2439,36 +2355,21 @@ const WELCOME_MESSAGES = [
     (memberId, emoji) => `El servidor acaba de subir de nivel: llegó <@${memberId}>. ¡Bienvenido! ${emoji}`,
     (memberId, emoji) => `${emoji} ¡Hola, <@${memberId}>! Tu llegada fue aprobada por el comité imaginario del caos.`,
     (memberId, emoji) => `¡<@${memberId}> se une a la aventura! Que empiece la búsqueda del mejor canal. ${emoji}`,
-    (memberId, emoji) => `${emoji} ¡Bienvenido a la comunidad, <@${memberId}>! Las buenas conversaciones y los memes te esperan.`
+    (memberId, emoji) => `${emoji} ¡Bienvenido a la comunidad, <@${memberId}>! Las buenas conversaciones y los memes te esperan.`,
+    (memberId, emoji) => `¡Qué alegría tenerte por aquí, <@${memberId}>! Explora el servidor y siéntete como en casa. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡<@${memberId}>, llegaste justo a tiempo! Siempre hay espacio para una nueva aventura.`,
+    (memberId, emoji) => `¡Un aplauso para <@${memberId}>! Ya eres parte de esta comunidad. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Bienvenido, <@${memberId}>! No olvides saludar y encontrar tu rincón favorito.`,
+    (memberId, emoji) => `¡La comunidad crece con <@${memberId}>! Ponte cómodo y disfruta el servidor. ${emoji}`,
+    (memberId, emoji) => `¡Hola, <@${memberId}>! Esperamos que encuentres buenas charlas, risas y nuevos amigos. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡<@${memberId}> ya está aquí! La aventura mejora con cada integrante.`,
+    (memberId, emoji) => `¡Bienvenido, <@${memberId}>! Revisa los canales y descubre todo lo que tenemos preparado. ${emoji}`,
+    (memberId, emoji) => `${emoji} ¡Pasa y ponte cómodo, <@${memberId}>! Nos alegra que formes parte del servidor.`
 ];
 
 function pickRandomMessage(messages) {
 
     return messages[Math.floor(Math.random() * messages.length)];
-}
-
-function getBotReplyType(message) {
-    const content = message.content
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase();
-
-    const shouldSendGif = [
-        /\bcalla\b/,
-        /\bduerman\s+al\s+bot\b/,
-        /\btienes\s+down\b/,
-        /\bbajen\s+el\s+sueldo\b/,
-        /\bque\s+te\s+apaguen\b/
-    ].some(pattern => pattern.test(content));
-
-    if (shouldSendGif) return "gif";
-
-    const mentionsBot = message.mentions.has(message.client.user)
-        || message.mentions.users.has(message.client.user.id)
-        || message.mentions.repliedUser?.id === message.client.user.id
-        || new RegExp(`\\b(bot|robot)\\b|<@!?${message.client.user.id}>`).test(content);
-
-    return mentionsBot ? "mention" : null;
 }
 
 // ===============================
@@ -3021,48 +2922,6 @@ async function registerCommands() {
 
 }
 
-function scheduleFunnyMessage() {
-
-    const delay = Math.floor(
-        Math.random() * (MAX_FUNNY_MESSAGE_DELAY - MIN_FUNNY_MESSAGE_DELAY + 1)
-    ) + MIN_FUNNY_MESSAGE_DELAY;
-
-    setTimeout(async () => {
-
-        try {
-
-            const channel = await client.channels.fetch(CHAT_CHANNEL_ID);
-
-            if (!channel?.isTextBased()) {
-                throw new Error("El canal configurado no existe o no admite mensajes.");
-            }
-
-            const phrase = FUNNY_MESSAGES[
-                Math.floor(Math.random() * FUNNY_MESSAGES.length)
-            ];
-
-            await channel.send({
-                content: `<@&${FUNNY_ROLE_ID}> ${phrase}`,
-                allowedMentions: {
-                    parse: [],
-                    roles: [FUNNY_ROLE_ID]
-                }
-            });
-
-        } catch (error) {
-
-            console.error("No pude enviar el mensaje automático:", error);
-
-        } finally {
-
-            scheduleFunnyMessage();
-
-        }
-
-    }, delay);
-
-}
-
 const HELP_PAGES = [
     {
         title: "✨ Bienvenido a iCloud",
@@ -3201,7 +3060,6 @@ client.once("ready", async () => {
     updateBotPresence();
     scheduleSavedRoleExpirations();
 
-    scheduleFunnyMessage();
     await registerCommands();
 
 });
@@ -3225,7 +3083,7 @@ function updateBotPresence() {
                 type: ActivityType.Custom
             }
         ],
-        status: "online"
+        status: "dnd"
     });
 }
 
@@ -3603,43 +3461,6 @@ client.on("messageCreate", async message => {
     if (await handleAutomodMessage(message)) return;
 
     if (await handleCounterMessage(message)) return;
-
-    const botReplyType = message.guild.id === PERSONALITY_GUILD_ID
-        && message.channel.id === CHAT_CHANNEL_ID
-        ? getBotReplyType(message)
-        : null;
-
-    if (botReplyType) {
-        try {
-
-            await relayCommunityMessage(message);
-            await message.channel.sendTyping();
-            await new Promise(resolve => setTimeout(resolve, BOT_REPLY_DELAY));
-            if (botReplyType === "gif") {
-                const gifUrl = pickRandomMessage(BOT_REPLY_GIF_URLS);
-                const replyEmoji = pickRandomMessage(BOT_GIF_REPLY_EMOJIS);
-                await message.channel.send(`${replyEmoji} ${pickRandomMessage(BOT_REPLY_MESSAGES)}\n${gifUrl}`);
-            } else {
-                await message.channel.send(
-                    pickRandomMessage(BOT_MENTION_MESSAGES)
-                );
-
-                try {
-                    await message.react("<:sunglas:1531564951049732107>");
-                } catch (error) {
-                    console.error("No pude reaccionar al mensaje que menciona al bot:", error);
-                }
-            }
-
-        } catch (error) {
-
-            console.error("No pude responder al mensaje contra el bot:", error);
-
-        }
-
-        recordChatMessage(message);
-        return;
-    }
 
     recordChatMessage(message);
     await relayCommunityMessage(message);
